@@ -2,8 +2,7 @@ import datetime
 import re
 import dateutil.parser
 from dateutil import tz
-import dateparser
-from todoist.models import Item, Project
+from todoist.models import Item
 
 """
 
@@ -11,11 +10,15 @@ Note:
 ISO 8601 also defines a format for durations: PnYnMnDTnHnMnS
 e.g. P3Y6M4DT12H30M5S, or P2H35M - similar to just writing 2h30m, except the ISO8601 uses capitals for time.
 
+The Todoist datetime string format is "almost" the "ctime" format:
+
+except that Todoist has year before time of day, while ctime has year at the end.
+
 """
 
-TODOIST_DATE_FMT = "Ridiculous"  # "Fri 23 Mar 2018 15:01:05 +0000"
-DAY_DATE_FMT = '%Y-%m-%d'
-ISO_8601_FMT = '%Y-%m-%dT%H:%M:%S'
+# https://docs.python.org/3/library/datetime.html#strftime-strptime-behavior
+# Note: To get localized date formats, use the "Babel" package, c.f. https://stackoverflow.com/a/32785195/3241277
+TODOIST_DATE_FMT = "Ridiculous"  # e.g. "Fri 23 Mar 2018 15:01:05 +0000"
 LABEL_REGEX = r"@\w+"
 EXTRA_PROPS_REGEX = r"(?P<prop_group>\{(?P<props>(\w+:\s?[^,]+,?\s?)*)\})"
 PROP_KV_REGEX = r"((?P<key>\w+):\s?(?P<val>[^,]+),?\s?)"
@@ -24,21 +27,6 @@ TASK_REGEX = r"^(?P<title>.*?)" + EXTRA_PROPS_REGEX + "*\s*$"
 # extra_props_regex = r"(?P<prop_group>\{(?P<props>\w+:\s?[^,]+)*\})"
 # prop_kv_regex = r"(?P<key>\w+):\s?(?P<val>[^,]+)"
 # TASK_REGEX = r"^(?P<title>.*?)\s*(?P<reward_group>\{(R|r)eward:\s?(?P<reward>.+)\})?\s*$"
-
-
-def human_date_to_iso(human_date, fmt=ISO_8601_FMT):
-    """ Convert natural language / contextual dates, e.g. 'today', to iso date string.
-    Note: This is a little bit finicky. For instance, "in 2 weeks" works, but none of the following variations do:
-        "in two weeks", "2 weeks from now", "two weeks", "in 2 weeks from now", etc.
-
-    The returned datetime object does not by default have any timezone information,
-    so the iso datestring is basically local time.
-    """
-    dt = dateparser.parse(human_date)
-    if dt is None:
-        print(f"\nERROR: FAILED to parse human input date {human_date!r}.\n")
-        raise ValueError(f"FAILED to parse human input date {human_date!r}.")
-    return dt.strftime(fmt)
 
 
 def use_task_data_dict(func):
@@ -63,6 +51,30 @@ def extract_props(content):
     return props_dict, cleaned
 
 
+CUSTOM_FIELDS = {
+    'due_date',
+    'due_date_dt',
+    'due_date_utc_iso',
+    'due_date_local_dt',
+    'due_date_local_iso',
+    'due_date_safe_dt',
+    'due_date_safe_iso',
+    'date_added_dt',
+    'date_added_utc_iso',
+    'date_added_local_dt',
+    'date_added_local_iso',
+    'date_added_safe_dt',
+    'date_added_safe_iso',
+    'completed_date_dt',
+    'completed_date_utc_iso',
+    'completed_date_local_dt',
+    'completed_date_local_iso',
+    'completed_date_safe_dt',
+    'completed_date_safe_iso',
+    'checked_str',
+}
+
+
 def parse_task_dates(tasks, date_keys=("due_date", "date_added", "completed_date"), strict=False):
     """ Parse date strings and create python datetime objects. """
     endofday = datetime.time(23, 59, 59)
@@ -83,10 +95,19 @@ def parse_task_dates(tasks, date_keys=("due_date", "date_added", "completed_date
             if datestr:
                 # Date time object instance:
                 dtobj = task['%s_dt' % key] = dateutil.parser.parse(datestr) if datestr is not None else None
+                # CUSTOM_FIELDS.add('%s_dt' % key)
+                assert '%s_dt' % key in CUSTOM_FIELDS
                 # Note: These dates are usually in UTC time; you will need to convert to local timezone
                 task['%s_utc_iso' % key] = "{:%Y-%m-%dT%H:%M:%S}".format(dtobj)
-                # dt_local = task['%s_local_dt' % key] = dtobj.astimezone(localtz)
-                # task['%s_local_iso' % key] = "{:%Y-%m-%dT%H:%M:%S}".format(dt_local)
+                # CUSTOM_FIELDS.add('%s_utc_iso' % key)
+                assert '%s_utc_iso' % key in CUSTOM_FIELDS
+                # The time strings below is what you normally see in the app and what you probably want to display:
+                dt_local = task['%s_local_dt' % key] = dtobj.astimezone(localtz)
+                # CUSTOM_FIELDS.add('%s_local_dt' % key)
+                assert '%s_local_dt' % key in CUSTOM_FIELDS
+                task['%s_local_iso' % key] = "{:%Y-%m-%dT%H:%M:%S}".format(dt_local)
+                # CUSTOM_FIELDS.add('%s_local_iso' % key)
+                assert '%s_local_iso' % key in CUSTOM_FIELDS
                 # task['due_time_local'] = task['due_date_local_dt'].time()
                 # Local time (without date):
                 # due_time_local = dt_local.time()
@@ -95,7 +116,25 @@ def parse_task_dates(tasks, date_keys=("due_date", "date_added", "completed_date
                 # due_time_opt: Optional time, None if due time is "end of day" (indicating no due time only due day).
                 # task['%s_time_opt' % key] = time_opt = due_time_local if due_time_local != endofday else None
                 # task['%s_time_opt_HHMM' % key] = "{:%H:%M}".format(time_opt) if time_opt else ""
-                assert not any('%s' in k for k in task)  # Make sure we've replaced all '%s'
+            else:
+                # Just create datetime object for "guaranteed" / "safe" fields:
+                dtobj = datetime.datetime(2099, 12, 31, 23, 59, 59)
+                dt_local = dtobj.astimezone(localtz)
+
+            # It is nice to have some "guaranteed", safe fields which are always present:
+            task['%s_safe_dt' % key] = dt_local
+            task['%s_safe_iso' % key] = "{:%Y-%m-%dT%H:%M:%S}".format(dt_local)
+            # CUSTOM_FIELDS.add('%s_safe_dt' % key)
+            # CUSTOM_FIELDS.add('%s_safe_iso' % key)
+            assert '%s_safe_dt' % key in CUSTOM_FIELDS
+            assert '%s_safe_iso' % key in CUSTOM_FIELDS
+
+            assert not any('%s' in k for k in task)  # Make sure we've replaced all '%s'
+
+        # Also make "checked_str"
+        task["checked_str"] = "[x]" if task.get("checked", 0) else "[ ]"
+    # CUSTOM_FIELDS.add('checked_str')
+    assert 'checked_str' in CUSTOM_FIELDS
 
 
 # def parse_date_string(date_str, iso_fmt=None):

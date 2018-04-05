@@ -69,11 +69,15 @@ import os
 import shlex
 import operator
 import builtins
+from dateutil import tz
 from todoist.models import Item, Project
 import dateparser
+import shutil
 
 from rstodo import binary_operators
-from rstodo.todoist_tasks_utils import parse_task_dates, inject_project_info, human_date_to_iso
+from rstodo.todoist_tasks_utils import parse_task_dates, inject_project_info, CUSTOM_FIELDS
+from rstodo.date_utils import human_date_to_iso, utc_time_to_local, local_time_to_utc, end_of_day, start_of_day
+from rstodo.date_utils import ISO_8601_FMT, DATE_DAY_FMT, TODOIST_DATE_FMT
 from rstodo.todoist import get_todoist_api
 
 
@@ -132,7 +136,12 @@ def parse_action_args(action_groups):
     pass
 
 
-def print_tasks(tasks, print_fmt="{project_name:15} {due_date_dt:%Y-%m-%d %H:%M  } {content}", header=None,  sep="\n"):
+def print_tasks(
+        tasks,
+        # print_fmt="{project_name:15} {due_date_safe_dt:%Y-%m-%d %H:%M  } {content}",
+        print_fmt="{project_name:15} {due_date_safe_dt:%Y-%m-%d %H:%M}  {checked_str} {content}",
+        header=None,  sep="\n"
+):
     """
 
     Args:
@@ -145,7 +154,25 @@ def print_tasks(tasks, print_fmt="{project_name:15} {due_date_dt:%Y-%m-%d %H:%M 
 
     Frequently-used print formats:
         "* {content}"
-        "{project_name:15} {due_date_dt:%Y-%m-%d %H:%M  } {content}  ({checked})"
+        "{project_name:15} {due_date_safe_dt:%Y-%m-%d %H:%M  } {content}"
+        "{project_name:15} {due_date_safe_iso}    {content}  ({checked})"
+        "{project_name:15} {due_date_safe_dt:%Y-%m-%d %H:%M}  {checked}  {content}"
+        "{project_name:15} {due_date_safe_dt:%Y-%m-%d %H:%M}  {checked_str}  {content}"
+
+    Frequently-used headers:
+        "Project:        Due_date:          Task:"
+        "Project:        Due_date:          Done: Task:"
+        "Project:        Due_date:        Done: Task:"
+
+    See `parse_task_dates()` for available date fields. In brief:
+        due_date_utc
+        due_date_utc_iso
+        due_date_dt
+        due_date_local_dt
+        due_date_local_iso
+        due_date_safe_dt   # These two '_safe_' fields are guaranteed to be present, even if the task
+        due_date_safe_iso  # has no due_date, in which case we use the end of the century. (Note: local time!)
+        # We also have the same above fields for `date_added` and `completed_date`.
 
     """
     if header:
@@ -205,7 +232,7 @@ def filter_tasks(tasks, taskkey, op_name, value, missing="exclude", default=None
 
     """
     # First, check values and print helpful warnings about frequent pitfalls:
-    if op_name == 'le' and (taskkey.startswith('date') or taskkey.startswith('due')):
+    if op_name == 'le' and 'date' in taskkey and value[-2:] != '59':
         print("\nWARNING: You are using the less-than-or-equal-to (`le`) operator with a data value, "
               "which can be tricky. Consider using the less-than (`lt`) operator instead. If you do use the "
               "less-than-or-equal-to (`le`) operator, make sure to specify full time in comparison.\n")
@@ -322,16 +349,90 @@ def special_is_filter(tasks, *args):
         args = args[1:]
     else:
         negate = False
-    if args[0] == 'due':
+    if args[0] == 'due' or args[0] == 'overdue':
+        # Note: "-is due" is alias for "due today or overdue" which is equivalent to "due before tomorrow".
+        if args[0:2] == ["due", "or", "overdue"] or args[0:2] == ["overdue", "or", "due"]:
+            args[0:2] = ["due", "before", "tomorrow"]
+        timefmt = ISO_8601_FMT
         taskkey = 'due_date_utc_iso'
-        if len(args) > 1:
-            pass
-    elif args[0] in ('checked', 'unchecked', 'complete', 'incomplete'):
+        convert = None
+        if args[0] == 'overdue':
+            op_name = 'lt'
+            convert = start_of_day
+            when = "today"
+        elif len(args) > 1:
+            if args[1] in ('before', 'on', 'after'):
+                when = args[2]
+                if args[1] == 'before':
+                    op_name = 'lt'
+                    convert = start_of_day
+                elif args[1] == 'on':
+                    op_name = 'startswith'
+                    timefmt = DATE_DAY_FMT
+                else:  # args[2] == 'after':
+                    op_name = 'gt'
+                    convert = end_of_day
+            else:
+                # "-is due today", same as "-is due on today"
+                when = args[1]
+                op_name = 'startswith'
+                timefmt = DATE_DAY_FMT
+        else:
+            # "-is due":
+            when = "today"
+            op_name = 'le'
+            convert = end_of_day
+        dt = dateparser.parse(when)
+        if convert:
+            dt = convert(dt)
+        utc_str = local_time_to_utc(dt, fmt=timefmt)
+        # When we request tasks that are due, we don't want completed tasks, so remove these first:
+        tasks = filter_tasks(tasks, taskkey="checked", op_name="eq", value=0, missing="include")
+        # Then return tasks that are due as requested:
+        return filter_tasks(tasks, taskkey=taskkey, op_name=op_name, value=utc_str, negate=negate)
+    elif args[0] in ('checked', 'unchecked', 'complete', 'incomplete', 'completed', 'done'):
         # -is not checked
-        pass
+        if args[0][:2] in ('in', 'un'):
+            checked_val = 0
+        else:
+            checked_val = 1
+        taskkey = "checked"
+        op_name = "eq"
+        return filter_tasks(tasks, taskkey=taskkey, op_name=op_name, value=checked_val, negate=negate)
+    elif args[0] == 'in':
+        taskkey = "project_name"
+        op_name = "eq"
+        value = args[1]
+        return filter_tasks(tasks, taskkey=taskkey, op_name=op_name, value=value, negate=negate)
+    else:
+        raise ValueError("`-is` parameter %r not recognized. (args = %r)" % (args[0], args))
 
 
-def reschedule_tasks(tasks, new_date):
+def content_contains_filter(tasks, value, *args):
+    return filter_tasks(tasks, taskkey="content", op_name="contains", value=value, *args)
+
+
+def content_startswith_filter(tasks, value, *args):
+    return filter_tasks(tasks, taskkey="content", op_name="startswith", value=value, *args)
+
+
+def content_glob_filter(tasks, value, *args):
+    return filter_tasks(tasks, taskkey="content", op_name="glob", value=value, *args)
+
+
+def content_iglob_filter(tasks, value, *args):
+    return filter_tasks(tasks, taskkey="content", op_name="iglob", value=value, *args)
+
+
+def content_eq_filter(tasks, value, *args):
+    return filter_tasks(tasks, taskkey="content", op_name="eq", value=value, *args)
+
+
+def content_ieq_filter(tasks, value, *args):
+    return filter_tasks(tasks, taskkey="content", op_name="ieq", value=value, *args)
+
+
+def reschedule_tasks(tasks, new_date, timezone='local', update_local=False):
     """
 
     Args:
@@ -341,12 +442,77 @@ def reschedule_tasks(tasks, new_date):
     Returns:
 
     """
+    if timezone == 'date_string':
+        # Special case; instead of updating the due_date_utc, just send `date_string` to server.
+        # Note: For non-repeating tasks, this is certainly by far the simplest way to update due dates.
+        for task in tasks:
+            task.update(date_string=new_date)
+        return tasks
+    if isinstance(new_date, str):
+        new_date_str = new_date
+        new_date = dateparser.parse(new_date)
+        # Hmm, dateparser.parse evaluates "tomorrow" as "24 hours from now", not "tomorrow at 0:00:00).
+        # This is problematic since we typically reschedule tasks as all day events.
+        # dateparser has 'tomorrow' hard-coded as alias for "in 1 day", making it hard to re-work.
+        # Maybe it is better to just reschedule using date_string?
+        # But using date_string may overwrite recurring tasks?
+        # For now, just re-set time manually if new_date_str is "today", "tomorrow", etc.
+        if new_date_str in ('today', 'tomorrow') or 'days' in new_date_str:
+            new_date = new_date.replace(hour=23, minute=59, second=59)  # The second is actually the important part for Todoist.
+        # For more advanced, either use a different date parsing library, or use pendulum to shift the date.
+        # Alternatively, use e.g. parsedatetime, which supports "eod tomorrow".
+    if new_date.tzinfo is None:
+        if timezone == 'local':
+            timezone = tz.tzlocal()
+        elif isinstance(timezone, str):
+            timezone = tz.gettz(timezone)
+        new_date.replace(tzinfo=timezone)
+    # Surprisingly, when adding or updating due_date_utc with the v7.0 Sync API,
+    # `due_date_utc` should supposedly be in ISO8601 format, not the usual ctime-like format. Sigh.
+    new_date_utc = local_time_to_utc(new_date, fmt=ISO_8601_FMT)
+    """
+    WOOOOOT: 
+    When SENDING an updated `due_date_utc`, it must be in ISO8601 format!
+    From https://developer.todoist.com/sync/v7/?shell#update-an-item :
+    > The date of the task in the format YYYY-MM-DDTHH:MM (for example: 2012-3-24T23:59). 
+    > The value of due_date_utc must be in UTC. Note that, when the due_date_utc argument is specified, 
+    > the date_string is required and has to specified as well, and also, the date_string argument will be 
+    > parsed as local timestamp, and converted to UTC internally, according to the user’s profile settings.
+    
+    Maybe take a look at what happens in the web-app when you reschedule a task?
+    Hmm, the webapp uses the v7.1 Sync API at /API/v7.1/sync.
+    The v7.1 API uses task items with a "due" dict with keys "date", "timezone", "is_recurring", "string", and "lang".
+    This seems to make 'due_date_utc' obsolete. Seems like a good decision, but it makes some of my work obsolete.
+    
+    Perhaps it is easier to just only pass `date_string`, especially for non-recurring tasks.
+    """
     for task in tasks:
-        continue
+        date_string = task['date_string']
+        task.update(due_date_utc=new_date_utc, date_string=date_string)
+        # Note: other fields are not updated!
+        if update_local:
+            task['due_date_utc'] = new_date_utc
+    if update_local:
+        parse_task_dates(tasks)
     return tasks
 
 
-def mark_tasks_completed(tasks):
+def update_tasks(tasks):
+    """ Generic task updater.
+
+    Todoist task updating caveats:
+
+    * priority: This is VERY weird! From the v7 sync API docs:
+        > "Note: Keep in mind that "very urgent" is the priority 1 on clients. So, p1 will return 4 in the API."
+        In other words, these are all reversed:
+            p4 -> 1, p3 -> 2, p2 -> 3, p1 -> 4.
+        That is just insane.
+
+    """
+    pass
+
+
+def mark_tasks_completed(tasks, method='close'):
     """
 
     Note: The Todoist v7 Sync API has two command types for completing tasks:
@@ -357,7 +523,7 @@ def mark_tasks_completed(tasks):
             regular task is completed and moved to history,
             subtasks are checked (marked as done, but not moved to history),
             recurring task is moved forward (due date is updated).
-
+            Aka: "done".
 
     See: https://developer.todoist.com/sync/v7/#complete-items
 
@@ -385,16 +551,6 @@ def fetch_completed_tasks(tasks):
     return tasks
 
 
-def sync(tasks):
-    try:
-        task = next(iter(tasks))
-    except StopIteration:
-        print("\nWARNING: `tasks` list is empty; cannot sync.\n")
-    else:
-        task.api.sync()
-    return tasks
-
-
 # Probably not needed:
 # def unmark_tasks_completed(tasks):
 #     pass
@@ -406,11 +562,21 @@ ACTIONS = {
     'print': print_tasks,
     'sort': sort_tasks,
     'filter': filter_tasks,
+    'is': special_is_filter,  # Special cases, e.g. "-is incomplete" or "-is not overdue".
+    # contains, startswith, glob/iglob, eq/ieq are all trivial derivatives of filter:
+    'contains': content_contains_filter,
+    'startswith': content_startswith_filter,
+    'glob': content_glob_filter,
+    'iglob': content_iglob_filter,
+    'eq': content_eq_filter,
+    'ieq': content_ieq_filter,
     'reschedule': reschedule_tasks,
     'mark-completed': mark_tasks_completed,
-    'sync': sync,
-    'fetch-completed': fetch_completed_tasks,  # WARNING: Not sure how this works, but probably doesn't work well.
+    'mark-as-done': mark_tasks_completed,
+    # 'sync': sync,
+    # 'fetch-completed': fetch_completed_tasks,  # WARNING: Not sure how this works, but probably doesn't work well.
 }
+
 
 
 def action_cli(argv=None, verbose=0):
@@ -483,7 +649,7 @@ def action_cli(argv=None, verbose=0):
         -print
         -reschedule
         -mark-completed
-        -sync
+        -sync: Sync changes with the server. NOTE that sync will reset all previous task filters!
 
     You can chain as many operations as you need, but you cannot fork the pipeline.
     There is also no support for "OR" operators (or JOIN, or similar complexities).
@@ -585,6 +751,10 @@ def action_cli(argv=None, verbose=0):
     # print("\n".join(str(group) for group in action_groups))
 
     api = get_todoist_api()
+    # Regarding caching:
+    # By default, TodoistAPI.__init__ will load cache files (.json and .sync) from path given by `cache` parameter.
+    # api.sync() will invoke `_write_cache()` after `_post()` and `_update_state()`.
+
     # api.sync()  # Sync not always strictly needed; can load values from cache, e.g. for testing.
 
     # print()
@@ -608,6 +778,10 @@ def action_cli(argv=None, verbose=0):
     # print("Tasks:", len(tasks))
     # print(tasks)
 
+    # TODO: Invoking `sync` will invoke _write_cache, which has problems persisting datetime objects.
+    # There doesn't seem to be a problem server-wise (it only sends the queued commands).
+    #
+
     def increment_verbosity(tasks):
         # If you modify (reassign) an immutable type within a closure, it is by default considered a local variable.
         # To prevent this, declare that the variable is non-local:
@@ -624,11 +798,56 @@ def action_cli(argv=None, verbose=0):
         return tasks
     ACTIONS['h'] = ACTIONS['help'] = print_help
 
+    # Better to define sync here rather than relying on getting api from existing task
+    def sync(tasks):
+        """ Note: Sync without arguments will just fetch updates (no commit of local changes). """
+        # Remove custom fields (in preparation for JSON serialization during `_write_cache()`:
+        for task in api.state['items']:
+            for k in CUSTOM_FIELDS:
+                task.data.pop(k, None)  # pop(k, None) returns None if key doesn't exists, unlike `del task[k]`.
+        api.sync()
+        tasks = api.state['items']
+        parse_task_dates(tasks)
+        inject_project_info(tasks=tasks, projects=api.projects.all())
+        return tasks
+    ACTIONS['sync'] = sync
+
+    def commit(tasks, raise_on_error=True):
+        """ Commit is a sync that includes local commands from the queue, emptying the queue. Raises SyncError. """
+        for task in api.state['items']:
+            for k in CUSTOM_FIELDS:
+                task.data.pop(k, None)  # pop(k, None) returns None if key doesn't exists, unlike `del task[k]`.
+        api.commit(raise_on_error=raise_on_error)
+        tasks = api.state['items']
+        parse_task_dates(tasks)
+        inject_project_info(tasks=tasks, projects=api.projects.all())
+        return tasks
+    ACTIONS['commit'] = commit
+
+    # Better to define sync here rather than relying on getting api from existing task
+    def show_queue(tasks):
+        """ Show list of API commands in the post queue. """
+        # Remove custom fields (in preparation for JSON serialization during `_write_cache()`:
+        from pprint import pprint
+        print("\n\nAPI QUEUE:\n----------\n")
+        pprint(api.queue)
+        return tasks
+    ACTIONS['show-queue'] = show_queue
+
+    def delete_cache(tasks):
+        if api.cache is not None:
+            print("Deleting cache dir:", api.cache)
+            shutil.rmtree(api.cache)  # Is a directory containing .json and .sync files
+        else:
+            print("delete_cache: API does not have any cache specified, so cannot delete cache.")
+        return tasks
+    ACTIONS['delete-cache'] = delete_cache
+
     # For each action in the action chain, invoke the action providing the (remaining) tasks as first argument.
     for action_key, action_args in action_groups:
         n_tasks = len(tasks)
         if verbose >= 2:
-            print(f"\nInvoking '{action_key}' action on {n_tasks} with args:", action_args)
+            print(f"\nInvoking '{action_key}' action on {n_tasks} tasks with args:", action_args)
         action_func = ACTIONS[action_key]
         tasks = action_func(tasks, *action_args)
         assert tasks is not None
