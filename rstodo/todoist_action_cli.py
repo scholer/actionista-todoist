@@ -173,7 +173,7 @@ def sort_tasks(tasks, keys="project_name,item_order", order="ascending"):
     return tasks
 
 
-def filter_tasks(tasks, taskkey, op_name, value, missing="exclude", default=None, value_transform=None):
+def filter_tasks(tasks, taskkey, op_name, value, missing="exclude", default=None, value_transform=None, negate=False):
     """
 
     Args:
@@ -184,6 +184,12 @@ def filter_tasks(tasks, taskkey, op_name, value, missing="exclude", default=None
         missing:
         default:
         value_transform:
+        negate: Can be used to negate (invert) the filter.
+            Some operators already have an inverse operator, e.g. `eq` vs `ne`, `le` vs `gt`.
+            But other operators do not have a simple inverse operator, e.g. `startswith`.
+            So, if you want to remove/exclude tasks starting with 'Email', use:
+                -filter content startswith Email exclude _ _ True
+            Note: Negate applies to the transform, but not to tasks included/excluded due to missing value.
 
     Returns:
 
@@ -206,7 +212,19 @@ def filter_tasks(tasks, taskkey, op_name, value, missing="exclude", default=None
     if taskkey == 'due_date_utc':
         print("\nNOTICE: You are using 'due_date_utc' as filter taskkey. This has the rather-unhelpful "
               "format: 'Mon 26 Mar 2018 21:59:59 +0000'.\n")
+    # We often use "_" as placeholeder on the command line, because we cannot enter e None value:
+    if default == '_' or default == '__None__':
+        default = None
+    if value_transform == '_' or value_transform == '__None__':
+        value_transform = None
+    if isinstance(negate, str) and negate.lower() in ('false', '_', '__none__', '0'):
+        negate = False
+
+    negate = bool(negate)
     op = getattr(binary_operators, op_name)
+    # I'm currently negating explicitly in the all four 'missing' cases,
+    # but I could also just have re-defined `op` as: `def op(a, b): return _op(a, b) != negate`
+
     if value_transform:
         if isinstance(value_transform, str):
             # It is either 'int' or a custom eval statement:
@@ -264,21 +282,21 @@ def filter_tasks(tasks, taskkey, op_name, value, missing="exclude", default=None
             task_value = get_value(task)
             if task_value is None:
                 raise ValueError(f"Key {taskkey!r} not present (or None) in task {task['id']}: {task['content']}")
-            return op(task_value, value)
+            return op(task_value, value) != negate  # This comparison with negate will negate if negate is True.
     elif missing == "include":
         def filter_eval(task):
             # return taskkey not in task or op(itemgetter(task), value)
             task_value = get_value(task)
-            return task_value is None or op(task_value, value)
+            return task_value is None or (op(task_value, value)  != negate)
     elif missing == "exclude":
         def filter_eval(task):
             # return taskkey in task and op(itemgetter(task), value)
             task_value = get_value(task)
-            return task_value is not None and op(task_value, value)
+            return task_value is not None and (op(task_value, value) != negate)
     elif missing == "default":
         def filter_eval(task):
             task_value = get_value(task, default)
-            return op(task_value, value)
+            return op(task_value, value) != negate
         if default is None:
             print('\nWARNING: filter_tasks() called with missing="default" but no default value given (is None).\n')
     else:
