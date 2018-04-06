@@ -151,6 +151,9 @@ def parse_task_dates(tasks, date_keys=("due_date", "date_added", "completed_date
 
         # Also make "checked_str"
         task["checked_str"] = "[x]" if task.get("checked", 0) else "[ ]"
+        # Also make priority string, "p1", "p2". This is kind of weird, because p1 (high priority) is 4 not 1.
+        task["priority_str"] = "p%s" % (5 - task.get("priority", 1))
+
     # CUSTOM_FIELDS.add('checked_str')
     assert 'checked_str' in CUSTOM_FIELDS
 

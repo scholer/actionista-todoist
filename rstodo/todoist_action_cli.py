@@ -145,7 +145,9 @@ def parse_action_args(action_groups):
 def print_tasks(
         tasks,
         # print_fmt="{project_name:15} {due_date_safe_dt:%Y-%m-%d %H:%M  } {content}",
-        print_fmt="{project_name:15} {due_date_safe_dt:%Y-%m-%d %H:%M}  {checked_str} {content}",
+        # print_fmt="{project_name:15} {due_date_safe_dt:%Y-%m-%d %H:%M}  {checked_str} {content}",
+        # print_fmt="{project_name:15} {due_date_safe_dt:%Y-%m-%d %H:%M}  {priority_str} {checked_str} {content}",
+        print_fmt="{project_name:15} {due_date_safe_dt:%Y-%m-%d %H:%M}  {priority_str} {checked_str} {content} (due: {date_string})",
         header=None,  sep="\n"
 ):
     """ Print tasks, `-print` action.
@@ -170,6 +172,7 @@ def print_tasks(
         "Project:        Due_date:          Task:"
         "Project:        Due_date:          Done: Task:"
         "Project:        Due_date:        Done: Task:"
+        "Project:        Due_date:        P:   Done: Task:"
 
     See `parse_task_dates()` for available date fields. In brief:
         due_date_utc
@@ -438,7 +441,7 @@ def is_not_filter(tasks, *args):
 
 def due_date_filter(tasks, *when):
     """ Special `-due [when]` filter, just an alias for `-is due [when]` """
-    args = ['due'] + when
+    args = ['due'] + list(when)  # Apparently *args is a tuple, not a list.
     return special_is_filter(tasks, *args)
 
 
@@ -466,7 +469,35 @@ def content_ieq_filter(tasks, value, *args):
     return filter_tasks(tasks, taskkey="content", op_name="ieq", value=value, *args)
 
 
-def reschedule_tasks(tasks, new_date, timezone='local', update_local=False):
+def project_iglob_filter(tasks, value, *args):
+    return filter_tasks(tasks, taskkey="project_name", op_name="iglob", value=value, *args)
+
+
+def priority_ge_filter(tasks, value, *args):
+    value = int(value)
+    return filter_tasks(tasks, taskkey="priority", op_name="ge", value=value, *args)
+
+
+def priority_eq_filter(tasks, value, *args):
+    value = int(value)
+    return filter_tasks(tasks, taskkey="priority", op_name="eq", value=value, *args)
+
+
+def priority_str_filter(tasks, value, *args):
+    return filter_tasks(tasks, taskkey="priority_str", op_name="eq", value=value, *args)
+
+
+def p1_filter(tasks, *args):
+    return priority_str_filter(tasks, value="p1", *args)
+def p2_filter(tasks, *args):
+    return priority_str_filter(tasks, value="p2", *args)
+def p3_filter(tasks, *args):
+    return priority_str_filter(tasks, value="p3", *args)
+def p4_filter(tasks, *args):
+    return priority_str_filter(tasks, value="p4", *args)
+
+
+def reschedule_tasks(tasks, new_date, timezone='date_string', update_local=False):
     """
 
     Args:
@@ -475,8 +506,28 @@ def reschedule_tasks(tasks, new_date, timezone='local', update_local=False):
 
     Returns:
 
+    WOOOOOT:
+    When SENDING an updated `due_date_utc`, it must be in ISO8601 format!
+    From https://developer.todoist.com/sync/v7/?shell#update-an-item :
+    > The date of the task in the format YYYY-MM-DDTHH:MM (for example: 2012-3-24T23:59).
+    > The value of due_date_utc must be in UTC. Note that, when the due_date_utc argument is specified,
+    > the date_string is required and has to specified as well, and also, the date_string argument will be
+    > parsed as local timestamp, and converted to UTC internally, according to the user’s profile settings.
+
+    Maybe take a look at what happens in the web-app when you reschedule a task?
+    Hmm, the webapp uses the v7.1 Sync API at /API/v7.1/sync.
+    The v7.1 API uses task items with a "due" dict with keys "date", "timezone", "is_recurring", "string", and "lang".
+    This seems to make 'due_date_utc' obsolete. Seems like a good decision, but it makes some of my work obsolete.
+
+    Perhaps it is easier to just only pass `date_string`, especially for non-recurring tasks.
+
+    Regarding v7.1 Sync API:
+        * The web client doesn't send "next sunday" date strings any more. The client is in charge of parsing
+            the date and sending a valid date. The due.string was set to "15 Apr".
     """
-    if timezone == 'date_string':
+    print("\n\nRescheduling %s tasks for %r..." % (len(tasks), new_date))
+    print(" - Remember to use `-commit` to push the changes (not `-sync`)!\n\n")
+    if timezone == 'date_string':  # Making this the default
         # Special case; instead of updating the due_date_utc, just send `date_string` to server.
         # Note: For non-repeating tasks, this is certainly by far the simplest way to update due dates.
         for task in tasks:
@@ -488,8 +539,10 @@ def reschedule_tasks(tasks, new_date, timezone='local', update_local=False):
                 task.update(date_string=new_date)
         return tasks
     if isinstance(new_date, str):
-        new_date_str = new_date
+        new_date_str = new_date  # Save the str
         new_date = dateparser.parse(new_date)
+        if new_date is None:
+            raise ValueError("Could not parse date %r." % (new_date_str,))
         # Hmm, dateparser.parse evaluates "tomorrow" as "24 hours from now", not "tomorrow at 0:00:00).
         # This is problematic since we typically reschedule tasks as all day events.
         # dateparser has 'tomorrow' hard-coded as alias for "in 1 day", making it hard to re-work.
@@ -509,22 +562,6 @@ def reschedule_tasks(tasks, new_date, timezone='local', update_local=False):
     # Surprisingly, when adding or updating due_date_utc with the v7.0 Sync API,
     # `due_date_utc` should supposedly be in ISO8601 format, not the usual ctime-like format. Sigh.
     new_date_utc = local_time_to_utc(new_date, fmt=ISO_8601_FMT)
-    """
-    WOOOOOT: 
-    When SENDING an updated `due_date_utc`, it must be in ISO8601 format!
-    From https://developer.todoist.com/sync/v7/?shell#update-an-item :
-    > The date of the task in the format YYYY-MM-DDTHH:MM (for example: 2012-3-24T23:59). 
-    > The value of due_date_utc must be in UTC. Note that, when the due_date_utc argument is specified, 
-    > the date_string is required and has to specified as well, and also, the date_string argument will be 
-    > parsed as local timestamp, and converted to UTC internally, according to the user’s profile settings.
-    
-    Maybe take a look at what happens in the web-app when you reschedule a task?
-    Hmm, the webapp uses the v7.1 Sync API at /API/v7.1/sync.
-    The v7.1 API uses task items with a "due" dict with keys "date", "timezone", "is_recurring", "string", and "lang".
-    This seems to make 'due_date_utc' obsolete. Seems like a good decision, but it makes some of my work obsolete.
-    
-    Perhaps it is easier to just only pass `date_string`, especially for non-recurring tasks.
-    """
     for task in tasks:
         date_string = task['date_string']
         task.update(due_date_utc=new_date_utc, date_string=date_string)
@@ -612,6 +649,14 @@ ACTIONS = {
     'name': content_iglob_filter,  # Alias.
     'eq': content_eq_filter,
     'ieq': content_ieq_filter,
+    'project': project_iglob_filter,
+    'priority': priority_eq_filter,
+    'priority-ge': priority_ge_filter,
+    'priority_str': priority_str_filter,
+    'p1': p1_filter,
+    'p2': p2_filter,
+    'p3': p3_filter,
+    'p4': p4_filter,
     'reschedule': reschedule_tasks,
     'mark-completed': mark_tasks_completed,
     'mark-as-done': mark_tasks_completed,
@@ -853,6 +898,7 @@ def action_cli(argv=None, verbose=0):
     def sync(tasks):
         """ Note: Sync without arguments will just fetch updates (no commit of local changes). """
         # Remove custom fields (in preparation for JSON serialization during `_write_cache()`:
+        print("\nSyncing... (fetching updates FROM the server; use `commit` to push changes!\n")
         for task in api.state['items']:
             for k in CUSTOM_FIELDS:
                 task.data.pop(k, None)  # pop(k, None) returns None if key doesn't exists, unlike `del task[k]`.
@@ -865,6 +911,7 @@ def action_cli(argv=None, verbose=0):
 
     def commit(tasks, raise_on_error=True):
         """ Commit is a sync that includes local commands from the queue, emptying the queue. Raises SyncError. """
+        print("\nCommitting local changes and fetching updates...\n")
         for task in api.state['items']:
             for k in CUSTOM_FIELDS:
                 task.data.pop(k, None)  # pop(k, None) returns None if key doesn't exists, unlike `del task[k]`.
