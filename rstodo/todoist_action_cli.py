@@ -70,6 +70,7 @@ import shlex
 import operator
 import builtins
 from dateutil import tz
+import todoist
 from todoist.models import Item, Project
 import dateparser
 import shutil
@@ -78,7 +79,7 @@ from rstodo import binary_operators
 from rstodo.todoist_tasks_utils import parse_task_dates, inject_project_info, CUSTOM_FIELDS
 from rstodo.date_utils import human_date_to_iso, utc_time_to_local, local_time_to_utc, end_of_day, start_of_day
 from rstodo.date_utils import ISO_8601_FMT, DATE_DAY_FMT, TODOIST_DATE_FMT
-from rstodo.todoist import get_todoist_api
+from rstodo.todoist import get_todoist_api, get_config, get_token
 
 
 def parse_argv(argv=None):
@@ -120,15 +121,20 @@ def parse_argv(argv=None):
 
     action_groups = []  # List of (action, args) pairs.
     base_args = current_group_args = []
+    base_kwargs = current_group_kwargs = {}
     for arg in argv:
         if arg[0] == "-":
-            current_group_args = []
-            action_name = arg[1:]  # Truncate the leading '-'.
-            action_groups.append((action_name, current_group_args))
+            current_group_args, current_group_kwargs = [], {}  # Start new args group for action
+            action_name = arg[1:]  # Truncate the leading '-' in '-action'.
+            action_groups.append((action_name, current_group_args, current_group_kwargs))
         else:
-            current_group_args.append(arg)
-
-    return action_groups
+            # Added support for key=value command line args:
+            if '=' in arg:
+                k, v = arg.split("=", 1)  # k=v pair
+                current_group_kwargs[k] = v
+            else:
+                current_group_args.append(arg)
+    return (base_args, base_kwargs), action_groups
 
 
 def parse_action_args(action_groups):
@@ -142,15 +148,16 @@ def print_tasks(
         print_fmt="{project_name:15} {due_date_safe_dt:%Y-%m-%d %H:%M}  {checked_str} {content}",
         header=None,  sep="\n"
 ):
-    """
+    """ Print tasks, `-print` action.
 
     Args:
-        tasks:
-        print_fmt:
-        header:
-        sep:
+        tasks: List of tasks or task dicts to print.
+        print_fmt: How to print each task.
+            Note: You can use print_fmt="pprint" to just print all tasks using pprint.
+        header: Print a header before printing the tasks.
+        sep: How to separate each printed task. Default is just "\n".
 
-    Returns:
+    Returns: List of tasks.
 
     Frequently-used print formats:
         "* {content}"
@@ -182,7 +189,7 @@ def print_tasks(
         import pprint
         pprint.pprint(task_dicts)
     else:
-        print(sep.join(print_fmt.format(**task) for task in task_dicts))
+        print(sep.join(print_fmt.format(task=task, **task) for task in task_dicts))
     return tasks
 
 
@@ -298,7 +305,13 @@ def filter_tasks(tasks, taskkey, op_name, value, missing="exclude", default=None
         nonlocal value
         task = task.data if isinstance(task, Item) else task
         # return taskkey not in task or op(itemgetter(task), value)
-        task_value = task.get(taskkey, default_)
+        if 'due' in task and taskkey in ('due_date', 'due_date_utc'):
+            # Support for v7.1 Sync API with separate 'due' dict attribute:
+            # Although this may depend on how `parse_task_dates()` deals with v7.1 tasks.
+            due_dict = task.get('due') or {}
+            task_value = due_dict.get()
+        else:
+            task_value = task.get(taskkey, default_)
         if task_value is not None and type(task_value) != type(value):
             print("NOTICE: `type(task_value) != type(value)` - Coercing `value` to %s:" % type(task_value))
             value = type(task_value)(value)
@@ -314,7 +327,7 @@ def filter_tasks(tasks, taskkey, op_name, value, missing="exclude", default=None
         def filter_eval(task):
             # return taskkey not in task or op(itemgetter(task), value)
             task_value = get_value(task)
-            return task_value is None or (op(task_value, value)  != negate)
+            return task_value is None or (op(task_value, value) != negate)
     elif missing == "exclude":
         def filter_eval(task):
             # return taskkey in task and op(itemgetter(task), value)
@@ -404,8 +417,29 @@ def special_is_filter(tasks, *args):
         op_name = "eq"
         value = args[1]
         return filter_tasks(tasks, taskkey=taskkey, op_name=op_name, value=value, negate=negate)
+    elif args[0] == 'recurring':
+        """ `-is [not] recurring` filter.
+        NOTE: The 'is_recurring' attribute is not officially exposed and "may be removed soon",
+        c.f. https://github.com/Doist/todoist-api/issues/33
+        """
+        taskkey = "is_recurring"
+        op_name = "eq"
+        value = 1
+        return filter_tasks(tasks, taskkey=taskkey, op_name=op_name, value=value, negate=negate)
     else:
         raise ValueError("`-is` parameter %r not recognized. (args = %r)" % (args[0], args))
+
+
+def is_not_filter(tasks, *args):
+    """ `-not` action, just an alias for `-is not`. """
+    args = ['not'] + args
+    return special_is_filter(tasks, *args)
+
+
+def due_date_filter(tasks, *when):
+    """ Special `-due [when]` filter, just an alias for `-is due [when]` """
+    args = ['due'] + when
+    return special_is_filter(tasks, *args)
 
 
 def content_contains_filter(tasks, value, *args):
@@ -446,7 +480,12 @@ def reschedule_tasks(tasks, new_date, timezone='local', update_local=False):
         # Special case; instead of updating the due_date_utc, just send `date_string` to server.
         # Note: For non-repeating tasks, this is certainly by far the simplest way to update due dates.
         for task in tasks:
-            task.update(date_string=new_date)
+            if 'due' in task.data:
+                # Support v7.1 Sync API with dedicated 'due' dict attribute.
+                new_due = {'string': new_date}
+                task.update(due=new_due)
+            else:
+                task.update(date_string=new_date)
         return tasks
     if isinstance(new_date, str):
         new_date_str = new_date
@@ -563,11 +602,14 @@ ACTIONS = {
     'sort': sort_tasks,
     'filter': filter_tasks,
     'is': special_is_filter,  # Special cases, e.g. "-is incomplete" or "-is not overdue".
+    'not': is_not_filter,
+    'due': due_date_filter,
     # contains, startswith, glob/iglob, eq/ieq are all trivial derivatives of filter:
     'contains': content_contains_filter,
     'startswith': content_startswith_filter,
     'glob': content_glob_filter,
     'iglob': content_iglob_filter,
+    'name': content_iglob_filter,  # Alias.
     'eq': content_eq_filter,
     'ieq': content_ieq_filter,
     'reschedule': reschedule_tasks,
@@ -745,12 +787,21 @@ def action_cli(argv=None, verbose=0):
 
 
     """
-    action_groups = parse_argv(argv=argv)
-
+    (base_args, base_kwargs), action_groups = parse_argv(argv=argv)
     # print("Action groups:")
     # print("\n".join(str(group) for group in action_groups))
 
-    api = get_todoist_api()
+    # api = get_todoist_api()
+    config = get_config() or {}
+    config.update(base_kwargs)
+    token = get_token(raise_if_missing=True, config=config)
+    api = todoist.TodoistAPI(token=token)
+    if config.get('api_url'):
+        # Default: 'https://todoist.com/API/v7/' (including the last '/')
+        assert config.get('api_url').endswith('/')
+        print("NOTICE: USING NON-STANDARD API BASE URL:", config.get('api_url'))
+        api.api_endpoint = None  # Make sure this is not used.
+        api.get_api_url = lambda: config.get('api_url')
     # Regarding caching:
     # By default, TodoistAPI.__init__ will load cache files (.json and .sync) from path given by `cache` parameter.
     # api.sync() will invoke `_write_cache()` after `_post()` and `_update_state()`.
@@ -844,12 +895,12 @@ def action_cli(argv=None, verbose=0):
     ACTIONS['delete-cache'] = delete_cache
 
     # For each action in the action chain, invoke the action providing the (remaining) tasks as first argument.
-    for action_key, action_args in action_groups:
+    for action_key, action_args, action_kwargs in action_groups:
         n_tasks = len(tasks)
         if verbose >= 2:
             print(f"\nInvoking '{action_key}' action on {n_tasks} tasks with args:", action_args)
         action_func = ACTIONS[action_key]
-        tasks = action_func(tasks, *action_args)
+        tasks = action_func(tasks, *action_args, **action_kwargs)
         assert tasks is not None
 
 

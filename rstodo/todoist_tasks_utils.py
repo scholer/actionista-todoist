@@ -83,8 +83,20 @@ def parse_task_dates(tasks, date_keys=("due_date", "date_added", "completed_date
         # 'due_date' has been permanently renamed to 'due_date_utc'. (Which is ridiculous, btw).
         if isinstance(task, Item):
             task = task.data
-        if 'due_date_utc' in task:
+
+        if 'due_date_utc' in task:  # May still be `None`!
             task['due_date'] = task['due_date_utc']
+            # xx:xx:59 = due date with no time (v7.0)
+            task['is_allday'] = (task['due_date_utc'] or "59")[-2:] == "59"
+        elif task.get('due'):
+            # v7.1 Sync API has separate 'due' child dict - expand these to the old v7.0 format:
+            task['due_date_utc'] = task['due_date'] = task['due']['date']
+            task['date_string'] = task['due']['string']
+            task['is_recurring'] = task['due']['is_recurring']
+            task['is_allday'] = len(task['due']['date']) <= len("2018-12-31")
+            # Note: v7.1 due date is in ISO8601 format (unlike v7.0).
+        else:
+            task['is_allday'] = True
 
         # print("Parsing dates in Task:")
         # print(task)
@@ -94,7 +106,11 @@ def parse_task_dates(tasks, date_keys=("due_date", "date_added", "completed_date
             datestr = task[key] if strict else task.get(key)  # E.g. ""Fri 23 Mar 2018 15:01:05 +0000" - ridiculous.
             if datestr:
                 # Date time object instance:
-                dtobj = task['%s_dt' % key] = dateutil.parser.parse(datestr) if datestr is not None else None
+                dtobj = task['%s_dt' % key] = dateutil.parser.parse(datestr)
+                dt_local = task['%s_local_dt' % key] = dtobj.astimezone(localtz)
+                if task['is_allday']:
+                    # Force v7.0 behaviour for datetime objects:
+                    dt_local.replace(hour=23, minute=59, second=59)
                 # CUSTOM_FIELDS.add('%s_dt' % key)
                 assert '%s_dt' % key in CUSTOM_FIELDS
                 # Note: These dates are usually in UTC time; you will need to convert to local timezone
@@ -102,7 +118,6 @@ def parse_task_dates(tasks, date_keys=("due_date", "date_added", "completed_date
                 # CUSTOM_FIELDS.add('%s_utc_iso' % key)
                 assert '%s_utc_iso' % key in CUSTOM_FIELDS
                 # The time strings below is what you normally see in the app and what you probably want to display:
-                dt_local = task['%s_local_dt' % key] = dtobj.astimezone(localtz)
                 # CUSTOM_FIELDS.add('%s_local_dt' % key)
                 assert '%s_local_dt' % key in CUSTOM_FIELDS
                 task['%s_local_iso' % key] = "{:%Y-%m-%dT%H:%M:%S}".format(dt_local)
@@ -118,6 +133,9 @@ def parse_task_dates(tasks, date_keys=("due_date", "date_added", "completed_date
                 # task['%s_time_opt_HHMM' % key] = "{:%H:%M}".format(time_opt) if time_opt else ""
             else:
                 # Just create datetime object for "guaranteed" / "safe" fields:
+                # Note: The v7.1 Sync API just specifies due date with no time as '2018-04-15', i.e. without time info.
+                # Unfortunately, datetime objects have no way to specify "all day" or "no time spec".
+                # See comments in this thread by pvkooten (author of metadate): https://goo.gl/3ZNdW3
                 dtobj = datetime.datetime(2099, 12, 31, 23, 59, 59)
                 dt_local = dtobj.astimezone(localtz)
 

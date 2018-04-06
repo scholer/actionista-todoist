@@ -258,6 +258,28 @@ If you have a post request data, parse it as:
     print(json.loads(d['commands'][0])[0].keys())
 
 
+Todoist v7.1 Sync API:
+----------------------
+
+I've started preparing to upgrade to v7.1 Sync API, because I realized there was no way to
+reliably determine if a task is recurring in the v7.0 API.
+Unfortunately, supporting both versions adds a bit of complexity.
+Specifically, the v7.1 API deals with due dates differently.
+Due dates are saved as a child dict attribute, rather than just a simple string,
+The format has also changed to ISO8601, and instead of using "23:59:59" as "all day" due time,
+it now just sets due.date to 'YYYY-MM-DD' with no time spec.
+When this is transformed to datetime objects, the time is defaulted to 0:00:00,
+which would make it difficult to filter and sort due dates.
+I've thus directed `parse_task_dates()` to keep the old behaviour,
+setting the datetime's local time to 23:59:59.
+
+I'm not sure how task updating work in the v7.1 Sync API.
+
+
+
+
+
+
 Todoist REST API v8:
 --------------------
 
@@ -311,14 +333,7 @@ TOKEN_PATHS = [
 
 
 def get_config():
-    # for cand in CONFIG_PATHS:
-    #     if os.path.isfile(cand):
-    #         config_fn = cand
-    #         break
-    # else:
-    #     return None
     fn_cands = map(os.path.expanduser, CONFIG_PATHS)
-    # fn_cands = (os.path.expanduser(pth) for pth in CONFIG_PATHS)
     try:
         config_fn = next(cand for cand in fn_cands if os.path.isfile(cand))
     except StopIteration:
@@ -328,7 +343,7 @@ def get_config():
     return config
 
 
-def get_token(raise_if_missing=True):
+def get_token(raise_if_missing=True, config=None):
     """ Get Todoist login token.
 
     Will search standard token file locations (`TOKEN_PATHS`), and if no token files are found,
@@ -344,13 +359,16 @@ def get_token(raise_if_missing=True):
 
     """
     token = None
+    config = get_config()
+    if config is not None:
+        token = config.get('token')
+    if token:
+        return token
     fn_cands = map(os.path.expanduser, TOKEN_PATHS)
     try:
         fn = next(cand for cand in fn_cands if os.path.isfile(cand))
     except StopIteration:
-        config = get_config()
-        if config is not None:
-            token = config.get('token')
+        pass
     else:
         with open(fn) as fp:
             token = fp.read().strip()
