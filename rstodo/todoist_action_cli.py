@@ -72,7 +72,9 @@ import builtins
 from dateutil import tz
 import todoist
 from todoist.models import Item, Project
+import datetime
 import dateparser
+import parsedatetime  # Provides better information about the accuracy of the parsed date/time.
 import shutil
 
 from rstodo import binary_operators
@@ -398,8 +400,21 @@ def special_is_filter(tasks, *args):
             when = "today"
             op_name = 'le'
             convert = end_of_day
-        dt = dateparser.parse(when)
-        if convert:
+        # Using dateparser.DateDataParser().get_date_data() instead of dateparser.parse() we get a 'period' indication:
+        # date_data = dateparser.DateDataParser().get_date_data(when)
+        # if date_data is None:
+        #     raise ValueError("Could not parse due date %r" % (when,))
+        # dt, accuracy = date_data['date_obj'], date_data['period']  # Max 'period' precision is 'day' :(
+        # Using parsedatetime, since dateparser has a poor concept of accuracy:
+        # parsedatetime also understands e.g. "in two days", etc.
+        cal = parsedatetime.Calendar()
+        # Note: cal.parse returns a time.struct_time, not datetime object,
+        # use cal.parseDT() to get a datetime object. Or just dt = datetime.datetime(*dt[:6])
+        dt, context = cal.parseDT(when, version=2)  # provide `version` to get a context obj.
+        if not context.hasDate:
+            raise ValueError("Could not parse due date %r" % (when,))
+        if convert and not context.hasTime:
+            # Only perform conversion, i.e. snap to start/end of day, when no time indication was provided:
             dt = convert(dt)
         utc_str = local_time_to_utc(dt, fmt=timefmt)
         # When we request tasks that are due, we don't want completed tasks, so remove these first:

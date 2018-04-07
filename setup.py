@@ -28,6 +28,7 @@ setup(
         'pyyaml',
         'pytz',
         'dateparser',  # Required for human_date_to_iso()
+        'parsedatetime',  # Has better concept of accuracy of the parsed date/time than dateparser.
         # 'jupyter',
         # 'notebook'
     ],
