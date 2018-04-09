@@ -198,9 +198,11 @@ def print_tasks(
     return tasks
 
 
-def sort_tasks(tasks, keys="project_name,item_order", order="ascending"):
+def sort_tasks(tasks, keys="project_name,priority_str,item_order", order="ascending"):
     """ Sort list of tasks.
+
     Frequently-used sortings:
+
         project_name,item_order
         due_date,priority,item_order
 
@@ -263,6 +265,9 @@ def filter_tasks(tasks, taskkey, op_name, value, missing="exclude", default=None
     op = getattr(binary_operators, op_name)
     # I'm currently negating explicitly in the all four 'missing' cases,
     # but I could also just have re-defined `op` as: `def op(a, b): return _op(a, b) != negate`
+
+    print(f" - Filtering {len(tasks)} tasks with: {taskkey!r} {op_name} {value!r} "
+          f"(missing={missing!r}, default={default!r}, value_transform={value_transform!r}, negate={negate!r})\n")
 
     if value_transform:
         if isinstance(value_transform, str):
@@ -417,6 +422,7 @@ def special_is_filter(tasks, *args):
             # Only perform conversion, i.e. snap to start/end of day, when no time indication was provided:
             dt = convert(dt)
         utc_str = local_time_to_utc(dt, fmt=timefmt)
+        # date_value_iso = dt.strftime(timefmt)
         # When we request tasks that are due, we don't want completed tasks, so remove these first:
         tasks = filter_tasks(tasks, taskkey="checked", op_name="eq", value=0, missing="include")
         # Then return tasks that are due as requested:
@@ -486,6 +492,17 @@ def content_ieq_filter(tasks, value, *args):
 
 def project_iglob_filter(tasks, value, *args):
     return filter_tasks(tasks, taskkey="project_name", op_name="iglob", value=value, *args)
+
+
+def priority_filter(tasks, *args):
+    assert len(args) > 1
+    if len(args) == 1:
+        # Default to "eq" op; -priority 2 --> -priority eq 2.
+        value, op_name, *args = int(args[0]), "eq", *args[1:]
+    else:
+        # -priority eq 2 / -priority lt 3 / etc.
+        op_name, value, *args = args
+    return filter_tasks(tasks, taskkey="priority", op_name=op_name, value=int(value), *args)
 
 
 def priority_ge_filter(tasks, value, *args):
@@ -665,7 +682,8 @@ ACTIONS = {
     'eq': content_eq_filter,
     'ieq': content_ieq_filter,
     'project': project_iglob_filter,
-    'priority': priority_eq_filter,
+    'priority': priority_filter,
+    'priority-eq': priority_eq_filter,
     'priority-ge': priority_ge_filter,
     'priority_str': priority_str_filter,
     'p1': p1_filter,
@@ -960,7 +978,7 @@ def action_cli(argv=None, verbose=0):
     for action_key, action_args, action_kwargs in action_groups:
         n_tasks = len(tasks)
         if verbose >= 2:
-            print(f"\nInvoking '{action_key}' action on {n_tasks} tasks with args:", action_args)
+            print(f"\nInvoking '{action_key}' action on {n_tasks} tasks with args: {action_args!r}\n")
         action_func = ACTIONS[action_key]
         tasks = action_func(tasks, *action_args, **action_kwargs)
         assert tasks is not None
