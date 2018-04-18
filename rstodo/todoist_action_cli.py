@@ -76,12 +76,15 @@ import datetime
 import dateparser
 import parsedatetime  # Provides better information about the accuracy of the parsed date/time.
 import shutil
+import string
 
 from rstodo import binary_operators
 from rstodo.todoist_tasks_utils import parse_task_dates, inject_project_info, CUSTOM_FIELDS
 from rstodo.date_utils import human_date_to_iso, utc_time_to_local, local_time_to_utc, end_of_day, start_of_day
 from rstodo.date_utils import ISO_8601_FMT, DATE_DAY_FMT, TODOIST_DATE_FMT
 from rstodo.todoist import get_todoist_api, get_config, get_token
+
+NEWLINE = '\n'
 
 
 def parse_argv(argv=None):
@@ -168,7 +171,12 @@ def print_tasks(
         print_fmt="{project_name:15} {due_date_safe_dt:%Y-%m-%d %H:%M}  {priority_str} {checked_str} {content} (due: {date_string!r})",
         header=None,  sep="\n"
 ):
-    """ Print tasks, `-print` action.
+    """ Print tasks, using a python format string.
+
+    Examples:
+        `-print`
+        `-print "{project_name:15} {due_date_safe_dt:%Y-%m-%d %H:%M  } {content}"`
+        `-print "{project_name:15} {content}" "Project name:   Task:`
 
     Args:
         tasks: List of tasks or task dicts to print.
@@ -215,10 +223,17 @@ def print_tasks(
 
 
 def sort_tasks(tasks, keys="project_name,priority_str,item_order", order="ascending"):
-    """ Sort list of tasks.
+    """ Sort the list of tasks, by task attribute in ascending or descending order.
+
+    Examples:
+
+        Sort tasks by project_name, then priority, in descending order:
+            -sort "project_name,priority" descending
+            sort_tasks(tasks, keys="project_name,priority", order="descending")
 
     Frequently-used sortings:
 
+        project_name,priority_str,item_order
         project_name,item_order
         due_date,priority,item_order
 
@@ -404,7 +419,7 @@ def generic_args_filter_adaptor(tasks, taskkey, args, *, default_op='iglob', **k
 
 
 def special_is_filter(tasks, *args):
-    """  Special -is filter for ad-hoc or frequently-used cases, e.g. -is not checked, etc.
+    """ Special -is filter for ad-hoc or frequently-used cases, e.g. -is not checked, etc.
 
     These are generally implemented on an as-needed basis.
 
@@ -508,98 +523,124 @@ def special_is_filter(tasks, *args):
 
 
 def is_not_filter(tasks, *args):
-    """ `-not` action, just an alias for `-is not`. Can be used as `-not recurring`."""
+    """ Convenience `-not` action, just an alias for `-is not`. Can be used as e.g. `-not recurring`."""
     args = ['not'] + list(args)
     return special_is_filter(tasks, *args)
 
 
 def due_date_filter(tasks, *when):
-    """ Special `-due [when]` filter, just an alias for `-is due [when]` """
+    """ Special `-due [when]` filter. Is just an alias for `-is due [when]`. """
     args = ['due'] + list(when)  # Apparently *args is a tuple, not a list.
     return special_is_filter(tasks, *args)
 
 
 def content_filter(tasks, *args):
-    """ Adaptor to filter tasks based on the 'content' attribute. """
+    """ Convenience adaptor to filter tasks based on the 'content' attribute (default op_name 'iglob'). """
     return generic_args_filter_adaptor(tasks=tasks, taskkey='content', args=args)
 
 
 def content_contains_filter(tasks, value, *args):
+    """ Convenience filter action using taskkey="content", op_name="contains". """
     return filter_tasks(tasks, taskkey="content", op_name="contains", value=value, *args)
 
 
 def content_startswith_filter(tasks, value, *args):
+    """ Convenience filter action using taskkey="content", op_name="startswith". """
     return filter_tasks(tasks, taskkey="content", op_name="startswith", value=value, *args)
 
 
 def content_endswith_filter(tasks, value, *args):
+    """ Convenience filter action using taskkey="content", op_name="endswith"."""
     return filter_tasks(tasks, taskkey="content", op_name="endswith", value=value, *args)
 
 
 def content_glob_filter(tasks, value, *args):
+    """ Convenience filter action using taskkey="content", op_name="glob". """
     return filter_tasks(tasks, taskkey="content", op_name="glob", value=value, *args)
 
 
 def content_iglob_filter(tasks, value, *args):
+    """ Convenience filter action using taskkey="content", op_name="iglob". """
     return filter_tasks(tasks, taskkey="content", op_name="iglob", value=value, *args)
 
 
 def content_eq_filter(tasks, value, *args):
+    """ Convenience filter action using taskkey="content", op_name="eq". """
     return filter_tasks(tasks, taskkey="content", op_name="eq", value=value, *args)
 
 
 def content_ieq_filter(tasks, value, *args):
+    """ Convenience filter action using taskkey="content", op_name="ieq". """
     return filter_tasks(tasks, taskkey="content", op_name="ieq", value=value, *args)
 
 
 def project_filter(tasks, *args):
+    """ Convenience adaptor for filter action using taskkey="project_name" (default op_name "iglob"). """
     return generic_args_filter_adaptor(tasks=tasks, taskkey='project_name', args=args)
 
 
 def project_iglob_filter(tasks, value, *args):
+    """ Convenience filter action using taskkey="content", op_name="iglob". """
     return filter_tasks(tasks, taskkey="project_name", op_name="iglob", value=value, *args)
 
 
 def priority_filter(tasks, *args):
+    """ Convenience adaptor for filter action using taskkey="priority" (default op_name "eq"). """
     return generic_args_filter_adaptor(tasks=tasks, taskkey='priority', args=args, default_op='eq', value_transform=int)
 
 
 def priority_ge_filter(tasks, value, *args):
+    """ Convenience filter action using taskkey="priority", op_name="ge". """
     value = int(value)
     return filter_tasks(tasks, taskkey="priority", op_name="ge", value=value, *args)
 
 
 def priority_eq_filter(tasks, value, *args):
+    """ Convenience filter action using taskkey="priority", op_name="eq". """
     value = int(value)
     return filter_tasks(tasks, taskkey="priority", op_name="eq", value=value, *args)
 
 
 def priority_str_filter(tasks, *args):
+    """ Convenience adaptor for filter action using taskkey="priority_str" (default op_name "eq"). """
     # return filter_tasks(tasks, taskkey="priority_str", op_name="eq", value=value, *args)
     return generic_args_filter_adaptor(tasks=tasks, taskkey='priority_str', args=args, default_op='eq')
 
 
 def priority_str_eq_filter(tasks, value, *args):
+    """ Convenience filter action using taskkey="priority_str", op_name="eq". """
     return filter_tasks(tasks, taskkey="priority_str", op_name="eq", value=value, *args)
 
 def p1_filter(tasks, *args):
+    """ Filter tasks including only tasks with priority 'p1'. """
     return priority_str_eq_filter(tasks, value="p1", *args)
 def p2_filter(tasks, *args):
+    """ Filter tasks including only tasks with priority 'p2'. """
     return priority_str_eq_filter(tasks, value="p2", *args)
 def p3_filter(tasks, *args):
+    """ Filter tasks including only tasks with priority 'p3'. """
     return priority_str_eq_filter(tasks, value="p3", *args)
 def p4_filter(tasks, *args):
+    """ Filter tasks including only tasks with priority 'p3'. """
     return priority_str_eq_filter(tasks, value="p4", *args)
 
 
 def reschedule_tasks(tasks, new_date, timezone='date_string', update_local=False):
-    """
+    """ Reschedule tasks to a new date/time.
+
+    Example: Reschedule overdue tasks for tomorrow
+        $ todoist-action-cli -sync -due before today -reschedule tomorrow
+    Will reschedule overdue tasks using:
+        reschedule_tasks(tasks, 'tomorrow')
 
     Args:
-        tasks:
+        tasks: List of tasks.
         new_date:
+        timezone:
+        update_local:
 
     Returns:
+        List of tasks.
 
     WOOOOOT:
     When SENDING an updated `due_date_utc`, it must be in ISO8601 format!
@@ -684,7 +725,7 @@ def update_tasks(tasks):
 
 
 def mark_tasks_completed(tasks, method='close'):
-    """
+    """ Mark tasks as completed using method='close'.
 
     Note: The Todoist v7 Sync API has two command types for completing tasks:
         'item_complete' - used by ?
@@ -767,7 +808,7 @@ ACTIONS = {
     # 'sync': sync,
     # 'fetch-completed': fetch_completed_tasks,  # WARNING: Not sure how this works, but probably doesn't work well.
     # The following actions are overwritten when the api object is created inside the action_cli() function:
-    'verbose': None,
+    'verbose': None, 'v': None,
     'delete-cache': None,
     'sync': None,
     'commit': None,
@@ -940,7 +981,6 @@ def action_cli(argv=None, verbose=0):
 
     Sync and mark-complete does not take any additional arguments.
 
-
     """
     (base_args, base_kwargs), action_groups = parse_argv(argv=argv)
     # print("Action groups:")
@@ -989,6 +1029,7 @@ def action_cli(argv=None, verbose=0):
     #
 
     def increment_verbosity(tasks):
+        """ Increase program informational output verbosity. """
         # If you modify (reassign) an immutable type within a closure, it is by default considered a local variable.
         # To prevent this, declare that the variable is non-local:
         nonlocal verbose
@@ -996,17 +1037,11 @@ def action_cli(argv=None, verbose=0):
         return tasks
     ACTIONS['v'] = ACTIONS['verbose'] = increment_verbosity
 
-    def print_help(tasks):
-        # import re
-        # print(repr(action_cli.__doc__))  # Nope, escapes proper line breaks.
-        # print(re.escape(action_cli.__doc__))  # Nope, escapes whitespace.
-        print(action_cli.__doc__)  # Works, if you are using r""" for your docstrings (which you probably should).
-        return tasks
-    ACTIONS['h'] = ACTIONS['help'] = print_help
-
     # Better to define sync here rather than relying on getting api from existing task
     def sync(tasks):
-        """ Note: Sync without arguments will just fetch updates (no commit of local changes). """
+        """ Pull task updates from the server to synchronize the local task data cache.
+        Note: api.sync() without arguments will just fetch updates (no commit of local changes).
+        """
         # Remove custom fields (in preparation for JSON serialization during `_write_cache()`:
         print("\nSyncing... (fetching updates FROM the server; use `commit` to push changes!\n")
         for task in api.state['items']:
@@ -1034,7 +1069,7 @@ def action_cli(argv=None, verbose=0):
 
     # Better to define sync here rather than relying on getting api from existing task
     def show_queue(tasks):
-        """ Show list of API commands in the post queue. """
+        """ Show list of API commands in the POST queue. """
         # Remove custom fields (in preparation for JSON serialization during `_write_cache()`:
         from pprint import pprint
         print("\n\nAPI QUEUE:\n----------\n")
@@ -1044,6 +1079,9 @@ def action_cli(argv=None, verbose=0):
     ACTIONS['print-queue'] = show_queue
 
     def delete_cache(tasks):
+        """ Delete local todoist data cache.
+        Should be done periodically, and especially if you start to experience any unusual behaviour.
+        """
         if api.cache is not None:
             print("Deleting cache dir:", api.cache)
             shutil.rmtree(api.cache)  # Is a directory containing .json and .sync files
@@ -1051,6 +1089,27 @@ def action_cli(argv=None, verbose=0):
             print("delete_cache: API does not have any cache specified, so cannot delete cache.")
         return tasks
     ACTIONS['delete-cache'] = delete_cache
+
+    def print_help(tasks, cmd=None):
+        """ Print help messages. Use `-help <action>` to get help on a particular action. """
+        # import re
+        # print(repr(action_cli.__doc__))  # Nope, escapes proper line breaks.
+        # print(re.escape(action_cli.__doc__))  # Nope, escapes whitespace.
+        if cmd not in ACTIONS:
+            print(f"\nERROR: {cmd!r} command not recognized.\n")
+            cmd = None
+        if cmd is None:
+            print(action_cli.__doc__)  # Works, if you are using r""" for your docstrings (which you probably should).
+            print("    Complete list of available actions:")
+            print("    -------------------------------------\n")
+            print("\n".join(
+                f"      -{action:20} {(func.__doc__ or '').split(NEWLINE, 1)[0]}"
+                for action, func in list(ACTIONS.items())))
+            print("\n")
+        else:
+            print(ACTIONS[cmd].__doc__)
+        return tasks
+    ACTIONS['h'] = ACTIONS['help'] = print_help
 
     unrecognized_actions = [agroup[0] for agroup in action_groups if agroup[0] not in ACTIONS]
     if unrecognized_actions:
