@@ -871,7 +871,7 @@ def parse_args(argv=None):
     #  a. Capturing the subparser argument explicitly using the `dest` argument in ap.add_subparsers().
     #  b. Let the sub-parser set the subcommand function using sp.set_defaults(func=foo).
 
-    # TODO: Use the method from `pptx-downsizer` to get default arguments from functions.
+    # TODO: Use the method from `pptx-downsizer` to get default arguments from functions. (Or, use click.)
     sp = subparsers.add_parser('print-query')
     sp.set_defaults(func=print_query_result)
     sp.add_argument('--query', default="(overdue | today)")  # "(overdue | today) & #Work"

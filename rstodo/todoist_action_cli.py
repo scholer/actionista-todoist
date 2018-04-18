@@ -144,12 +144,28 @@ def parse_action_args(action_groups):
     pass
 
 
+def get_task_value(task, taskkey, default=None, coerce_type=None):
+    task = task.data if isinstance(task, Item) else task
+    # return taskkey not in task or op(itemgetter(task), value)
+    if 'due' in task and taskkey in ('due_date', 'due_date_utc'):
+        # Support for v7.1 Sync API with separate 'due' dict attribute:
+        # Although this may depend on how `parse_task_dates()` deals with v7.1 tasks.
+        due_dict = task.get('due') or {}
+        task_value = due_dict.get()
+    else:
+        task_value = task.get(taskkey, default)
+    if coerce_type is not None and task_value is not None and type(task_value) != coerce_type:
+        print("NOTICE: `type(task_value) != coerce_type` - Coercing `task_value` to %s:" % type(coerce_type))
+        task_value = coerce_type(task_value)
+    return task_value
+
+
 def print_tasks(
         tasks,
         # print_fmt="{project_name:15} {due_date_safe_dt:%Y-%m-%d %H:%M  } {content}",
         # print_fmt="{project_name:15} {due_date_safe_dt:%Y-%m-%d %H:%M}  {checked_str} {content}",
         # print_fmt="{project_name:15} {due_date_safe_dt:%Y-%m-%d %H:%M}  {priority_str} {checked_str} {content}",
-        print_fmt="{project_name:15} {due_date_safe_dt:%Y-%m-%d %H:%M}  {priority_str} {checked_str} {content} (due: {date_string})",
+        print_fmt="{project_name:15} {due_date_safe_dt:%Y-%m-%d %H:%M}  {priority_str} {checked_str} {content} (due: {date_string!r})",
         header=None,  sep="\n"
 ):
     """ Print tasks, `-print` action.
@@ -215,16 +231,16 @@ def sort_tasks(tasks, keys="project_name,priority_str,item_order", order="ascend
 
 
 def filter_tasks(tasks, taskkey, op_name, value, missing="exclude", default=None, value_transform=None, negate=False):
-    """
+    """ Generic task filtering method based on comparison with a specific task attribute.
 
     Args:
-        tasks:
-        taskkey:
-        op_name:
-        value:
-        missing:
-        default:
-        value_transform:
+        tasks: List of tasks (dicts or todoist.Item).
+        taskkey: The attribute key to compare against, e.g. 'due_date_local_iso' or 'project'.
+        op_name: Name of the binary operator to use when comparing the task attribute against the given value.
+        value: The value to compare the task's attribute against.
+        missing: How to deal with tasks with missing attributes, e.g. "include", "exclude", or default to a given value.
+        default: Use this value if a task attribute is missing and missing="default".
+        value_transform: Perform a given transformation of the input value, e.g. `int`, or `str`.
         negate: Can be used to negate (invert) the filter.
             Some operators already have an inverse operator, e.g. `eq` vs `ne`, `le` vs `gt`.
             But other operators do not have a simple inverse operator, e.g. `startswith`.
@@ -233,6 +249,7 @@ def filter_tasks(tasks, taskkey, op_name, value, missing="exclude", default=None
             Note: Negate applies to the transform, but not to tasks included/excluded due to missing value.
 
     Returns:
+        Filtered list of tasks passing the filter criteria (attribute matching value).
 
     The `missing` parameter controls what to do if `taskkey` is not present in a task:
         "raise" -> raise a KeyError.
@@ -319,10 +336,11 @@ def filter_tasks(tasks, taskkey, op_name, value, missing="exclude", default=None
             # Support for v7.1 Sync API with separate 'due' dict attribute:
             # Although this may depend on how `parse_task_dates()` deals with v7.1 tasks.
             due_dict = task.get('due') or {}
-            task_value = due_dict.get()
+            task_value = due_dict.get(taskkey.replace('due_', ''))  # items in the 'due' dict don't have 'due_' prefix
         else:
             task_value = task.get(taskkey, default_)
         if task_value is not None and type(task_value) != type(value):
+            # Note: We are converting the *comparison value*, not the task value:
             print("NOTICE: `type(task_value) != type(value)` - Coercing `value` to %s:" % type(task_value))
             value = type(task_value)(value)
         return task_value
@@ -353,6 +371,36 @@ def filter_tasks(tasks, taskkey, op_name, value, missing="exclude", default=None
         raise ValueError("`missing` value %r not recognized." % (missing,))
     tasks = [task for task in tasks if filter_eval(task)]
     return tasks
+
+
+def generic_args_filter_adaptor(tasks, taskkey, args, *, default_op='iglob', **kwargs):
+    """ A generic adaptor for filter_tasks(), accepting custom *args list.
+
+    Typical use case is to be able to process both of the following action requests
+    with a single function:
+        `-content RS123*` and `-content startswith RS123`.
+    This adaptor function just uses the number of args given to determine if a
+    binary operator was provided with the action request.
+
+    Args:
+        tasks: List of tasks, passed to filter_tasks.
+        taskkey: The task attribute to filter on.
+        default_op: The default binary operator to use, in the case the user did not specify one in args.
+        *args: User-provided action args, e.g. ['RS123*"], or ['startswith', 'RS123']
+
+    Returns:
+        Filtered list of tasks.
+
+    """
+    assert len(args) >= 1
+    if len(args) == 1:
+        # `-content RS123*`
+        op_name, value, args = default_op, args[0], args[1:]
+    else:
+        # `-content startswith work`
+        op_name, value, *args = args
+    print(f"generic_args_filter_adaptor: args={args}")
+    return filter_tasks(tasks, taskkey=taskkey, op_name=op_name, value=value, *args, **kwargs)
 
 
 def special_is_filter(tasks, *args):
@@ -444,19 +492,24 @@ def special_is_filter(tasks, *args):
     elif args[0] == 'recurring':
         """ `-is [not] recurring` filter.
         NOTE: The 'is_recurring' attribute is not officially exposed and "may be removed soon",
-        c.f. https://github.com/Doist/todoist-api/issues/33
+        c.f. https://github.com/Doist/todoist-api/issues/33.
+        Until then, perhaps it is better to filter based on whether the date_string starts with the word "every". 
         """
-        taskkey = "is_recurring"
-        op_name = "eq"
-        value = 1
-        return filter_tasks(tasks, taskkey=taskkey, op_name=op_name, value=value, negate=negate)
+        # taskkey = "is_recurring"
+        # op_name = "eq"
+        # value = 1
+        # return filter_tasks(tasks, taskkey=taskkey, op_name=op_name, value=value, negate=negate)
+        # -is not recurring : for recurring task : negate==True, startswith('every')==True => startswith == negate
+        print(f" - Filtering {len(tasks)} tasks, excluding {'' if negate else 'non-'}recurring tasks...\n")
+        return [task for task in tasks
+                if str(get_task_value(task, 'date_string')).lower().startswith('every') is not negate]
     else:
         raise ValueError("`-is` parameter %r not recognized. (args = %r)" % (args[0], args))
 
 
 def is_not_filter(tasks, *args):
-    """ `-not` action, just an alias for `-is not`. """
-    args = ['not'] + args
+    """ `-not` action, just an alias for `-is not`. Can be used as `-not recurring`."""
+    args = ['not'] + list(args)
     return special_is_filter(tasks, *args)
 
 
@@ -466,12 +519,21 @@ def due_date_filter(tasks, *when):
     return special_is_filter(tasks, *args)
 
 
+def content_filter(tasks, *args):
+    """ Adaptor to filter tasks based on the 'content' attribute. """
+    return generic_args_filter_adaptor(tasks=tasks, taskkey='content', args=args)
+
+
 def content_contains_filter(tasks, value, *args):
     return filter_tasks(tasks, taskkey="content", op_name="contains", value=value, *args)
 
 
 def content_startswith_filter(tasks, value, *args):
     return filter_tasks(tasks, taskkey="content", op_name="startswith", value=value, *args)
+
+
+def content_endswith_filter(tasks, value, *args):
+    return filter_tasks(tasks, taskkey="content", op_name="endswith", value=value, *args)
 
 
 def content_glob_filter(tasks, value, *args):
@@ -490,19 +552,16 @@ def content_ieq_filter(tasks, value, *args):
     return filter_tasks(tasks, taskkey="content", op_name="ieq", value=value, *args)
 
 
+def project_filter(tasks, *args):
+    return generic_args_filter_adaptor(tasks=tasks, taskkey='project_name', args=args)
+
+
 def project_iglob_filter(tasks, value, *args):
     return filter_tasks(tasks, taskkey="project_name", op_name="iglob", value=value, *args)
 
 
 def priority_filter(tasks, *args):
-    assert len(args) > 1
-    if len(args) == 1:
-        # Default to "eq" op; -priority 2 --> -priority eq 2.
-        value, op_name, *args = int(args[0]), "eq", *args[1:]
-    else:
-        # -priority eq 2 / -priority lt 3 / etc.
-        op_name, value, *args = args
-    return filter_tasks(tasks, taskkey="priority", op_name=op_name, value=int(value), *args)
+    return generic_args_filter_adaptor(tasks=tasks, taskkey='priority', args=args, default_op='eq', value_transform=int)
 
 
 def priority_ge_filter(tasks, value, *args):
@@ -515,18 +574,22 @@ def priority_eq_filter(tasks, value, *args):
     return filter_tasks(tasks, taskkey="priority", op_name="eq", value=value, *args)
 
 
-def priority_str_filter(tasks, value, *args):
+def priority_str_filter(tasks, *args):
+    # return filter_tasks(tasks, taskkey="priority_str", op_name="eq", value=value, *args)
+    return generic_args_filter_adaptor(tasks=tasks, taskkey='priority_str', args=args, default_op='eq')
+
+
+def priority_str_eq_filter(tasks, value, *args):
     return filter_tasks(tasks, taskkey="priority_str", op_name="eq", value=value, *args)
 
-
 def p1_filter(tasks, *args):
-    return priority_str_filter(tasks, value="p1", *args)
+    return priority_str_eq_filter(tasks, value="p1", *args)
 def p2_filter(tasks, *args):
-    return priority_str_filter(tasks, value="p2", *args)
+    return priority_str_eq_filter(tasks, value="p2", *args)
 def p3_filter(tasks, *args):
-    return priority_str_filter(tasks, value="p3", *args)
+    return priority_str_eq_filter(tasks, value="p3", *args)
 def p4_filter(tasks, *args):
-    return priority_str_filter(tasks, value="p4", *args)
+    return priority_str_eq_filter(tasks, value="p4", *args)
 
 
 def reschedule_tasks(tasks, new_date, timezone='date_string', update_local=False):
@@ -674,29 +737,42 @@ ACTIONS = {
     'not': is_not_filter,
     'due': due_date_filter,
     # contains, startswith, glob/iglob, eq/ieq are all trivial derivatives of filter:
+    # But they are special in that we use the binary operator name as the action name,
+    # and assumes we want to filter the tasks, using 'content' as the task key/attribute.
     'contains': content_contains_filter,
     'startswith': content_startswith_filter,
+    'endswith': content_endswith_filter,
     'glob': content_glob_filter,
     'iglob': content_iglob_filter,
-    'name': content_iglob_filter,  # Alias.
     'eq': content_eq_filter,
     'ieq': content_ieq_filter,
+    # Convenience actions where action name specifies the task attribute to filter on:
+    'content': content_filter,  # `-content endswith "sugar".
+    'name': content_filter,  # Alias for content_filter.
     'project': project_iglob_filter,
     'priority': priority_filter,
+    # More derived 'priority' filters:
     'priority-eq': priority_eq_filter,
     'priority-ge': priority_ge_filter,
-    'priority_str': priority_str_filter,
+    'priority-str': priority_str_filter,
+    'priority-str-eq': priority_str_eq_filter,
     'p1': p1_filter,
     'p2': p2_filter,
     'p3': p3_filter,
     'p4': p4_filter,
+    # Update task actions:
     'reschedule': reschedule_tasks,
     'mark-completed': mark_tasks_completed,
     'mark-as-done': mark_tasks_completed,
     # 'sync': sync,
     # 'fetch-completed': fetch_completed_tasks,  # WARNING: Not sure how this works, but probably doesn't work well.
+    # The following actions are overwritten when the api object is created inside the action_cli() function:
+    'verbose': None,
+    'delete-cache': None,
+    'sync': None,
+    'commit': None,
+    'show-queue': None,
 }
-
 
 
 def action_cli(argv=None, verbose=0):
@@ -845,6 +921,7 @@ def action_cli(argv=None, verbose=0):
 
     Printing takes three optional positional arguments:
         1. print_fmt: How to print each task. Every task field can be used as variable placeholder, e.g. {due_date_utc}.
+            You can print the full task data using "{task}", or the special "repr" or "pprint" keywords.
         2. header: A header to print, e.g. "TASKS DUE TODAY:\n-----------"
         3. sep: A separator between each task. Is usually just "\n".
 
@@ -964,6 +1041,7 @@ def action_cli(argv=None, verbose=0):
         pprint(api.queue)
         return tasks
     ACTIONS['show-queue'] = show_queue
+    ACTIONS['print-queue'] = show_queue
 
     def delete_cache(tasks):
         if api.cache is not None:
@@ -973,6 +1051,11 @@ def action_cli(argv=None, verbose=0):
             print("delete_cache: API does not have any cache specified, so cannot delete cache.")
         return tasks
     ACTIONS['delete-cache'] = delete_cache
+
+    unrecognized_actions = [agroup[0] for agroup in action_groups if agroup[0] not in ACTIONS]
+    if unrecognized_actions:
+        print("ERRROR, the following actions were not recognized:", unrecognized_actions)
+        return
 
     # For each action in the action chain, invoke the action providing the (remaining) tasks as first argument.
     for action_key, action_args, action_kwargs in action_groups:

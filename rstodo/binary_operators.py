@@ -39,6 +39,19 @@ def istartswith(a, b):
     return a.startswith(b)
 
 
+def endswith(a, b):
+    a = str(a)
+    b = str(b)
+    return a.endswith(b)
+
+
+def iendswith(a, b):
+    """ Case insensitive startswith. """
+    a = str(a).lower()
+    b = str(b).lower()
+    return a.endswith(b)
+
+
 def icontains(a, b):
     """ Case insensitive contains. """
     a = str(a).lower()
@@ -81,8 +94,8 @@ def ige(a, b):
     return a.lower() > b.lower()
 
 
-def is_(a, b):
-    return a is b
+# def is_(a, b):
+#     return a is b
 
 
 def re(a, b):
