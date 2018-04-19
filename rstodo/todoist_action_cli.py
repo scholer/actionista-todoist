@@ -408,6 +408,11 @@ def generic_args_filter_adaptor(tasks, taskkey, args, *, default_op='iglob', **k
 
     """
     assert len(args) >= 1
+    if args[0] == 'not':
+        negate = True
+        args = args[1:]
+    else:
+        negate = False
     if len(args) == 1:
         # `-content RS123*`
         op_name, value, args = default_op, args[0], args[1:]
@@ -415,11 +420,11 @@ def generic_args_filter_adaptor(tasks, taskkey, args, *, default_op='iglob', **k
         # `-content startswith work`
         op_name, value, *args = args
     print(f"generic_args_filter_adaptor: args={args}")
-    return filter_tasks(tasks, taskkey=taskkey, op_name=op_name, value=value, *args, **kwargs)
+    return filter_tasks(tasks, taskkey=taskkey, op_name=op_name, value=value, negate=negate, *args, **kwargs)
 
 
 def special_is_filter(tasks, *args):
-    """ Special -is filter for ad-hoc or frequently-used cases, e.g. -is not checked, etc.
+    """ Special -is filter for ad-hoc or frequently-used cases, e.g. `-is not checked`, etc.
 
     These are generally implemented on an as-needed basis.
 
@@ -774,6 +779,7 @@ ACTIONS = {
     'print': print_tasks,
     'sort': sort_tasks,
     'filter': filter_tasks,
+    'has': filter_tasks,  # Undocumented alias, for now.
     'is': special_is_filter,  # Special cases, e.g. "-is incomplete" or "-is not overdue".
     'not': is_not_filter,
     'due': due_date_filter,
@@ -790,7 +796,7 @@ ACTIONS = {
     # Convenience actions where action name specifies the task attribute to filter on:
     'content': content_filter,  # `-content endswith "sugar".
     'name': content_filter,  # Alias for content_filter.
-    'project': project_iglob_filter,
+    'project': project_filter,
     'priority': priority_filter,
     # More derived 'priority' filters:
     'priority-eq': priority_eq_filter,
@@ -877,6 +883,11 @@ def action_cli(argv=None, verbose=0):
         Note that using human language dates is a little bit finicky.
             For instance, "in 2 weeks" works, but none of the following variations do:
             "in two weeks", "2 weeks from now", "two weeks", "in 2 weeks from now", etc.
+
+        More examples:
+
+            $ todoist-action-cli -due before tomorrow -not recurring -project not Personal-* \
+                -sort "project_name,priority_str,due_date_local_iso" -print
 
     -Note: -sync is currently implied as the first action.-  (Edit: No, using cache for while testing.)
 

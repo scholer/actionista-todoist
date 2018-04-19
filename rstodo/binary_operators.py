@@ -23,6 +23,10 @@ from operator import eq, ne, lt, le, gt, ge, mod, countOf, contains, indexOf, an
 
 # Aliases:
 equals = equal = eq
+neq = nequal = ne
+less = lessthan = lt
+greater = greaterthan = gt
+modulus = mod
 glob = fnmatchcase
 
 
