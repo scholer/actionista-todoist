@@ -892,16 +892,20 @@ def action_cli(argv=None, verbose=0):
     -Note: -sync is currently implied as the first action.-  (Edit: No, using cache for while testing.)
 
     Available actions include:
-        -filter
-        -sort
-        -print
-        -reschedule
-        -mark-completed
-        -sync: Sync changes with the server. NOTE that sync will reset all previous task filters!
+        -filter         filter the task list.
+        -sort           sort the task list.
+        -print          print the task list.
+        -reschedule     reschedule all tasks in the current task list, usually after filter-selecting.
+        -mark-completed mark all tasks in the tasks list as completed.
+        -sync:          Sync changes with the server. NOTE that sync will reset all previous task filters!
+        -commit:        Commit local changes. Will ask for confirmation if `-y` has not been given beforehand.
+        -y, -yes:       Skip all confirmation prompts.
 
     You can chain as many operations as you need, but you cannot fork the pipeline.
     There is also no support for "OR" operators (or JOIN, or similar complexities).
 
+    To get help on each action, use:
+        `$ todoist-action-cli -help <action>`
 
     Filter:
     -------
@@ -1048,6 +1052,15 @@ def action_cli(argv=None, verbose=0):
         return tasks
     ACTIONS['v'] = ACTIONS['verbose'] = increment_verbosity
 
+    ask_before_commit = True
+
+    def disable_confirmation_prompt(tasks):
+        """ Disable confirmation prompt before enacting irreversible commands, e.g. -commit. """
+        nonlocal ask_before_commit
+        ask_before_commit = False
+        return tasks
+    ACTIONS['y'] = ACTIONS['yes'] = ACTIONS['no-prompt'] = disable_confirmation_prompt
+
     # Better to define sync here rather than relying on getting api from existing task
     def sync(tasks):
         """ Pull task updates from the server to synchronize the local task data cache.
@@ -1065,12 +1078,20 @@ def action_cli(argv=None, verbose=0):
         return tasks
     ACTIONS['sync'] = sync
 
-    def commit(tasks, raise_on_error=True):
+    def commit(tasks, *, raise_on_error=True):
         """ Commit is a sync that includes local commands from the queue, emptying the queue. Raises SyncError. """
-        print("\nCommitting local changes and fetching updates...\n")
+        # Prompt if needed:
+        if ask_before_commit:
+            answer = input(f"\nPROMPT: About to commit {len(api.queue)} updates. Continue? [Y/n] ") or 'Y'
+            if answer[0].lower() == 'n':
+                print(" - OK, ABORTING commit.")
+                return tasks
+        print(f"\nCommitting {len(api.queue)} local changes and fetching updates...\n")
+        # Remove custom fields before commit (and re-add them again afterwards)
         for task in api.state['items']:
             for k in CUSTOM_FIELDS:
                 task.data.pop(k, None)  # pop(k, None) returns None if key doesn't exists, unlike `del task[k]`.
+        # Commit changes (includes an automatic sync), and re-parse task items:
         api.commit(raise_on_error=raise_on_error)
         tasks = api.state['items']
         parse_task_dates(tasks)
