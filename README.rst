@@ -8,7 +8,7 @@ A ``find``-inspired "action chain" command line tool for managing your Todoist t
 The successful ``find`` utility works by supplying a sequence of "actions"
 (also known as "expressions" in the ``find`` manual).
 Most actions are essentially filters, where you list criteria for the files to find.
-However, the real usability of ``find`` is that is can not only print the matching files,
+However, the real usability of ``find`` is that it can not only print the matching files,
 but also use the matching files for other actions, e.g. deleting the files,
 or sending them to other command line tools.
 
@@ -18,6 +18,7 @@ Together with other actions, you can ``print``, ``reschedule``, ``rename``, ``ma
 whatever tasks you need.
 You can invoke as many actions as you need, both filters and other actions, in any order.
 The actions are invoked in exactly the order you specify.
+
 
 So if you want, you can filter tasks by e.g. project name, and print all tasks in a given project,
 then filter by due date, and print again, then reschedule the tasks that were just printed,
@@ -30,22 +31,37 @@ For the record, doing the described sequence of actions would look something lik
 
     $ todoist-action-cli -project Wedding -print \
         -due before today -print -reschedule tomorrow
-        -name startswith "Pick up tux" -rename "Ask Tommy to pick up tuxido"
+        -name startswith "Pick up the rings" -rename "Remind Tommy to pick up the rings"
         -commit
 
 
+Usually, for your own sanity, command line usage would be a little more simple, and have only a single "purpose"
+with each invocation::
+
+    # Basic example: Find tasks containing the string "rings":
+
+    $ todoist-action-cli -sync -name "*rings*" -sort -print
 
 
-This package was formerly imported as rsenv.rstodo.todoist_action_cli,
+
+The generalized command line usage is::
+
+    $ todoist-action-cli [-action [args]] [-action [args]] [...]
+
+
+You can also import the package from python::
+
+    >>> import actionista.todoist
+    >>> import actionista.todoist.action_cli
+
+Note: This package was formerly imported as ``rsenv.rstodo.todoist_action_cli``,
 but has now been separated into its own package, imported as: ``actionista.todoist_action_cli``.
-It can be invoked with either of two commands::
-
-    $ todoist-action-cli  [old name]
 
 
 NOTE: This application is not created by, affiliated with, or supported by Doist.
 It is a third-party command line utility that is making use of the official Todoist API,
 as documented by https://developer.todoist.com/sync/v7/.
+
 
 
 INSTALLATION:
@@ -59,8 +75,20 @@ To install distribution release package from the Python Packaging Index (PyPI)::
 Alternatively, install the latest git master source by fetching the git repository from github
 and install the package in editable mode (development mode)::
 
-    $ git clonse git@github.com:scholer/actionista-todoist && cd actionista-todoist
+    $ git clone git@github.com:scholer/actionista-todoist && cd actionista-todoist
     $ pip install -U -e .
+
+
+
+Once ``actionista-todoist`` package is installed, you need to obtain a login token from the todoist website:
+    Log into your todoist.com account, go to Settings → Integrations → Copy the API token.
+
+Create a file ``~/.todoist_token.txt`` and place your token in here.
+
+
+You can also add the token as a yaml-entry in the config file ``~/.todoist_config.yaml``::
+
+    token: <token>
 
 
 
@@ -68,7 +96,7 @@ and install the package in editable mode (development mode)::
 USAGE:
 ------
 
-Basic usage is::
+The general command line usage is::
 
     $ todoist-action-cli [actions]
     $ todoist-action-cli [-action [args]]
@@ -127,11 +155,89 @@ Where ``action`` is one of the following actions::
       -yes, -y               Disable confirmation prompt before enacting irreversible commands, e.g. -commit.
       -help, -h              Print help messages. Use `-help <action>` to get help on a particular action.
 
+To see how to use each filter, type::
+
+    $ todoist-action-cli -help <action_name>
+
+E.g.::
+
+    $ todoist-action-cli -help project
+    $ todoist-action-cli -help filter
+    $ todoist-action-cli -help reschedule
 
 
+
+As you can see, typical usage is::
+
+    $ todoist-action-cli -sync [one or more filter actions to select the tasks] -sort -print
+
+The filter actions could be e.g. filtering by ``-name`` (same as ``-content``),
+``project``, ``due_date_local_iso``, etc.
+The ``-sync`` action is optional; if you do not specify ``-sync``, the program will just re-use the old cache,
+from last time you invoked ``-sync``. You must invoke ``-sync`` at least once, when you first install this package,
+and you should always ``-sync`` if you have made any changes (e.g. from your phone) since your last sync.
+Finally, the ``-sort`` and ``-print`` commands will sort and print the selected tasks.
+
+If you need to refine your filters, just run the command again. The data is cached locally,
+so if you omit the ``-sync`` action, commands can be executed in rapid succession.
+
+
+Another example, to reschedule the due date for a bunch of tasks, would look like::
+
+    $ todoist-action-cli [-sync] [filter actions] [-sort] [-print] -reschedule "Apr 21" -commit
+
+
+*NOTE: I **strongly** recommend that you ``-print`` the filtered tasks before you
+``-rename`` or ``-reschedule`` the tasks. When you invoke ``-commit``, the changes cannot be undone automatically,
+so you may easily end up with a bunch of identically-named tasks with the same due date, if you forgot to
+apply the correct selection filters before renaming or rescheduling the tasks!
+For this reason, the program will, by default, ask you for confirmation before every `-commit`.*
+
+
+Action arguments:
+-----------------
+
+
+Each action can be provided a set of arguments which are listed sequentially, separated by space.
+If one argument contains spaces, e.g. you are filtering by tasks in the project "Meeting notes",
+then you need to quote the argument as such::
+
+    $ todoist-action-cli -sync -project "Meeting notes" -sort "project_name,content" ascending -print
+
+Here, we provided one argument to the ``-project`` action (``"Meeting notes"``),
+and two arguments to the ``-sort`` action (``"project_name,content"`` and ``ascending``).
+
+Some of the actions attempts to be "clever" when interpreting the arguments given.
+For instance, when filtering by project, you can do either::
+
+    $ todoist-action-cli -project "Wedding*"
+    $ todoist-action-cli -project glob "Wedding*"
+    $ todoist-action-cli -project startswith Wedding
+
+The general signature for the ``-project`` action is::
+
+    $ todoist-action-cli -project [operator] value
+
+Here, ``[operator]`` is the name of one of the many registered binary operators.
+These are used to compare the tasks against a given value.
+In the example above, if you do not specify any operator, then the "glob" operator is used.
+The "glob" operator allows you to use wild-cards for selecting tasks, the same way you select files on the command line.
+In our case, we "glob" against tasks with project name starting with the string "Wedding*".
+We could also have used the "startswith" operator, and omit the asterisk:  ``startswith Wedding``.
+
+For more info on how to use operators, see::
+
+    $ todoist-action-cli -help operators
+
+
+
+
+
+Ad-hoc CLI:
+------------
 
 Installing this project (``actionista-todoist``) with ``pip`` will also give you some
-"adhoc" command line interface entry points::
+"ad-hoc" command line interface entry points::
 
     $ todoist <command> <args>
     $ todoist print-query <query> [<print-fmt>]
@@ -145,8 +251,8 @@ Installing this project (``actionista-todoist``) with ``pip`` will also give you
 
 
 
-Other python-based Todoist projects:
-------------------------------------
+Note: Other python-based Todoist projects
+------------------------------------------
 
 **Other Todoist CLI packages that I know about:**
 
@@ -170,60 +276,6 @@ Other python-based Todoist projects:
     Focused on modelling individual Users/Projects/Tasks/Notes,
     where the official todoist-python package has *managers* as the central unit
     (ItemsManager, ProjectsManager, NotesManager).
-
-
-
-
-
-
-
-TODOIST web APIs:
------------------
-
-For a detailed discussion about the official Todoist Web APIs, see ``todoist.py`` module docstring.
-
-
-## TODOIST SYNC API v7 notes:
-
-
-### Activity log ('activity/get') vs Completed ('completed/get_all')
-
-Example activity log event::
-
-    {
-      "id" : 955333384,
-      "object_type" : "item",
-      "object_id" : 101157918,
-      "event_type" : "added",
-      "event_date" : "Fri 01 Jul 2016 14:24:59 +0000",
-      "parent_project_id" : 174361513,
-      "parent_item_id" : null,
-      "initiator_id" : null,
-      "extra_data" : {
-        "content" : "Task1",
-        "client" : "Mozilla/5.0; Todoist/830"
-      }
-    }
-
-
-Example completed/get_all response::
-
-    {
-      "items": [
-        { "content": "Item11",
-          "meta_data": null,
-          "user_id": 1855589,
-          "task_id": 33511505,
-          "note_count": 0,
-          "project_id": 128501470,
-          "completed_date": "Tue 17 Feb 2015 15:40:41 +0000",
-          "id": 33511505
-        }
-      ],
-      "projects": {
-        # All projects with items listed above.
-      }
-    }
 
 
 

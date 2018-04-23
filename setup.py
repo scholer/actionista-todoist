@@ -33,12 +33,16 @@ See `README.rst` for usage.
 """
 
 
+# Distribution build and release:
+#   python setup.py sdist
+#   python setup.py bdist_wheel
+#   twine upload dist/*
 setup(
     name='actionista-todoist',
-    version='0.5.1',
+    version='0.5.2dev1',
     packages=find_packages(),  # List all packages (directories) to include in the source dist.
     url='https://github.com/scholer/actionista-todoist',
-    license='GPLv3',
+    license='GNU General Public License v3 (GPLv3)',
     author='Rasmus Scholer Sorensen',
     author_email='rasmusscholer@gmail.com',
     description='Actionista Action-Chain CLI for Todoist (actionista-todoist). A `find`-inspired CLI for Todoist.',
@@ -82,7 +86,7 @@ setup(
         # 'Topic :: Scientific/Engineering',
 
         # Pick your license as you wish (should match 'license' above)
-        'License :: GNU Public License v3',
+        'License :: OSI Approved :: GNU General Public License v3 (GPLv3)',
 
         # Specify the Python versions you support here. In particular, ensure
         # that you indicate whether you support Python 2, Python 3 or both.
