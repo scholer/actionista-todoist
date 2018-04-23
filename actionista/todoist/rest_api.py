@@ -16,7 +16,7 @@ This module features classes and functions to utilize the Todoist v8 REST API.
 
 import requests
 
-from rstodo.todoist import get_token
+from actionista.todoist.utils import get_token
 
 
 class TodoistRestApi:

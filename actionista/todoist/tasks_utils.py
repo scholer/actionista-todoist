@@ -6,6 +6,10 @@ from todoist.models import Item
 
 """
 
+Module for task-specific functionality, e.g. adding extra fields to tasks, etc.
+Functions must operate on todoist.Item objects, or the equivalent dicts (or a list of tasks).
+
+
 Note: 
 ISO 8601 also defines a format for durations: PnYnMnDTnHnMnS
 e.g. P3Y6M4DT12H30M5S, or P2H35M - similar to just writing 2h30m, except the ISO8601 uses capitals for time.

@@ -28,15 +28,17 @@ INSTALLATION:
 Examples, command line usage:
 -----------------------------
 
-    print-query command:
-    * Note: --query defaults to "(overdue | today)"
+`print-query` command:
+* Note: --query defaults to "(overdue | today)"
 
-    $ python -m rstodo.todoist print-query [--query <query>] [--task-fmt <task-format>]
+    $ python -m actionista.todoist.adhoc_cli print-query [--query <query>] [--task-fmt <task-format>]
 
-    $ python -m rstodo.todoist print-query --print-fmt "* {due_date_time_opt_HHMM} > {title}"
+    $ python -m actionista.todoist.adhoc_cli print-query --print-fmt "* {due_date_time_opt_HHMM} > {title}"
 
-    print-todays-completed-items:
-    $ python -m rstodo.todoist print-todays-completed-items \
+
+`print-todays-completed-items` command:
+
+    $ python -m actionista.todoist.adhoc_cli print-completed-today \
         --print-fmt "* {completed_date_local_dt:%H%M} > {content}" --sort-key completed_date_dt
 
 
@@ -79,8 +81,8 @@ Todoist web APIs:
 
 
 
-Todoist APIs:
------------------
+Todoist API packages:
+---------------------
 
 * https://github.com/Doist/todoist-python [installed] –
     Official python library from Doist, using requests (Session).
@@ -95,6 +97,14 @@ Todoist APIs:
     Also uses the Sync v7 API - 'TodoistAPI.URL = https://api.todoist.com/API/v7/'
     Rolls its own API code using requests (`api` module), and object model (`todoist` module).
 
+
+### About the official `python-todoist` package:
+
+This is a little weird.
+For instance, you cannot do a simple `for project in api.projects:`,
+since `api.projects` is a ProjectsManager, which is not iterable.
+The same goes for `api.items` and everything else that you would expect to be iterable.
+You have to do `for task in api.state['items']`, or `for project in api.state['projects']`
 
 
 Todoist CLIs:
@@ -278,8 +288,6 @@ I'm not sure how task updating work in the v7.1 Sync API.
 
 
 
-
-
 Todoist REST API v8:
 --------------------
 
@@ -309,83 +317,14 @@ Example Comet request URL:
 
 import datetime
 from datetime import timezone
-import os
-import yaml
-import todoist
-# date/time packages:
 import dateutil.parser
 from dateutil.parser import parse as parse_date
-# import pytz
-# import pendulum
-# import arrow
-# import maya  # Kenneth's "Date and time for Humans" package.
-# import moment
-# import zulu
-from rstodo.todoist_tasks_utils import parse_task_dates, inject_project_info, parse_tasks_content
+from pprint import pprint
 
-CONFIG_PATHS = [
-    "~/.todoist_config.yaml"
-]
+from todoist.models import Project
 
-TOKEN_PATHS = [
-    "~/.todoist_token.txt"
-]
-
-
-def get_config():
-    fn_cands = map(os.path.expanduser, CONFIG_PATHS)
-    try:
-        config_fn = next(cand for cand in fn_cands if os.path.isfile(cand))
-    except StopIteration:
-        return None
-    with open(config_fn) as fp:
-        config = yaml.load(fp)
-    return config
-
-
-def get_token(raise_if_missing=True, config=None):
-    """ Get Todoist login token.
-
-    Will search standard token file locations (`TOKEN_PATHS`), and if no token files are found,
-    will load config and return `config['token']`.
-
-    Returns:
-        str token, or None if no token was found.
-
-    How to obtain and install your Todoist API token:
-        1. Log into your todoist.com account, go to Settings → Integrations → Copy the API token.
-        2. Place the token string either in a single file in one of the paths listed in `TOKEN_PATHS`,
-            or put the token in the configuration file keyed under 'token'.
-
-    """
-    token = None
-    config = get_config()
-    if config is not None:
-        token = config.get('token')
-    if token:
-        return token
-    fn_cands = map(os.path.expanduser, TOKEN_PATHS)
-    try:
-        fn = next(cand for cand in fn_cands if os.path.isfile(cand))
-    except StopIteration:
-        pass
-    else:
-        with open(fn) as fp:
-            token = fp.read().strip()
-    if not token and raise_if_missing:
-        raise ValueError(
-            "Unable to find token. Please place Todoist API token either in config file (`~/.todoist_config.yaml`)"
-            "or separate `~/.todoist_token.txt` file."
-        )
-    return token
-
-
-def get_todoist_api(token=None):
-    """ Returns Todoist API object with token read from file or config. """
-    if token is None:
-        token = get_token()
-    api = todoist.TodoistAPI(token=token)
-    return api
+from actionista.todoist.tasks_utils import parse_task_dates, parse_tasks_content, inject_project_info
+from actionista.todoist.utils import get_todoist_api
 
 
 def todoist_query(query, token=None):
@@ -635,6 +574,13 @@ def completed_get_all(token=None, project_id=None, since=None, until=None, limit
         * Although maybe it is better to just return the response dict
             which contains two keys, "items" and "projects"?
 
+    Note:
+        * I'm having issues with the project_id for tasks not matching any projects.
+        * The projects returned are good; it is indeed an issue with the project_id value. Maybe it is an old value?
+        * This issue doesn't seem to be present for the `activity/get` endpoint.
+        * This issue is NOT described in the docs, https://developer.todoist.com/sync/v7/#get-all-completed-items
+        * The documented example makes it appear that item['project_id'] should match projects[id]['id'] .
+
     """
     api = get_todoist_api(token)
     kwargs = dict(
@@ -646,7 +592,9 @@ def completed_get_all(token=None, project_id=None, since=None, until=None, limit
         annotate_notes=annotate_notes,
     )
     kwargs = {k: v for k, v in kwargs.items() if v is not None}
+    print("\nRetrieving completed tasks from Todoist server...")
     res = api.completed.get_all(**kwargs)
+    from pprint import pprint; pprint(res)
     return res['items'], res['projects']
 
 
@@ -713,6 +661,8 @@ def get_todays_completed_events(token=None):
 def get_todays_completed_items(token=None):
     """ Get todays completed items, using CompletedManager against the 'completed/get_all' endpoint.
     See `completed_get_all()` for info.
+    Note: The completed/get_all endpoint seems to return tasks with wrong project_id values.
+    Perhaps use activity/get endpoint via get_todays_completed_events() instead?
     """
     # TODO: Specifying since 'today' this way is bit of a hack; only works for timezones near or west of UTC.
     # TODO: Make proper, generic way of dealing with time and time strings!
@@ -723,15 +673,29 @@ def get_todays_completed_items(token=None):
 
 def print_todays_completed_items(
         token=None, print_fmt="{content}", sort_key="default",
-        add_project_info=True,
+        add_project_info=False,
 ):
-    """Print all tasks that were completed today."""
-    tasks, projects = get_todays_completed_items(token=token)
+    """ Print all tasks that were completed today. """
+    # tasks, projects = get_todays_completed_items(token=token)  # currently gives tasks with erroneous project_id.
+    events = get_todays_completed_events(token=token)  # Use activity/get instead of completed/get_all.
+    # This is just very generic, and instead of returning task items, it returns generic events.
+    # The task name/content is available as event['extra_data']['content'], and
+    # the task project_id is available as event['parent_project_id'].
+    # So we cannot use the event directly; we would have to transform them.
+    print("Events:")
+    pprint(events)
+    return
     # from pprint import pprint
     # pprint(tasks)
     # print()
     # pprint(projects)
     if add_project_info:
+        # Disabling by default, since the project_id and projects returned by api.completed.get_all()
+        # (at the completed/get_all endpoint) don't match up. The task's project_id is wrong, it seems!
+        # http://todoist.com/API/v7/completed/get_all
+        # Maybe they are just using old project_id values, but still.
+        # Is the api.activity.get() endpoint at https://todoist.com/API/v7/activity/get any better?
+        # Yes, it seems this gives correct project_id values for the returned tasks.
         inject_project_info(tasks, projects)
     tasks = print_tasks(tasks, print_fmt=print_fmt, sort_key=sort_key)
     return tasks
@@ -776,8 +740,8 @@ def reschedule_items(items, new_date='today'):
     If `new_date_utc` is wrong, you will get a SyncError:
         SyncError: (
             '87b2186e-5538-11e7-b699-38c9863570b9', {
-                'error_extra': {'expected': 'date: YYYY-MM-DDTHH:MM', 'argument': 'new_date_utc'}, 
-                'error_tag': 'INVALID_ARGUMENT_VALUE', 'error': 'Invalid argument value', 
+                'error_extra': {'expected': 'date: YYYY-MM-DDTHH:MM', 'argument': 'new_date_utc'},
+                'error_tag': 'INVALID_ARGUMENT_VALUE', 'error': 'Invalid argument value',
                 'command_type': 'item_update_date_complete', 'error_code': 20, 'http_code': 400})
     """
     # Expected date format: YYYY-MM-DDTHH:MM  (in UTC time!)
@@ -863,6 +827,23 @@ def reschedule_cmd(query, new_date='today'):
     api.commit()
 
 
+def print_projects(print_fmt="pprint-data", sort_key=None, sync=True, sep="\n"):
+
+    api = get_todoist_api()
+    if sync:
+        print("\nSyncing data with server...")
+        api.sync()
+    projects = api.state['projects']  # Not api.projects, which is a non-iterable ProjectsManager. Sigh.
+    if print_fmt == "pprint":
+        pprint(projects)
+    elif print_fmt == "pprint-data":
+        pprint([project.data for project in projects])  # Convert to list of dicts which prints better.
+    else:
+        for project in projects:
+            fmt_kwargs = project.data if isinstance(project, Project) else project
+            print(print_fmt.format(**fmt_kwargs), end=sep)
+
+
 def parse_args(argv=None):
     import argparse
     ap = argparse.ArgumentParser(prog="RS Todoist python CLI")
@@ -884,9 +865,16 @@ def parse_args(argv=None):
     sp = subparsers.add_parser('print-today-or-overdue')
     sp.set_defaults(func=print_today_or_overdue_tasks)
 
+    # Add shared args for task commands:
     for cmd, sp in subparsers.choices.items():
         sp.add_argument('--print-fmt', default="{content}")
         sp.add_argument('--sort-key', default="default")
+
+    # print_projects
+    sp = subparsers.add_parser('print-projects')
+    sp.set_defaults(func=print_projects)
+    sp.add_argument('--print-fmt', default="pprint")
+    sp.add_argument('--sort-key', default="default")
 
     # OBS: Do not make special switches, just use print-fmt and the regex-parsed variables.
     argns = ap.parse_args(argv)
@@ -920,4 +908,3 @@ def main(argv=None):
 
 if __name__ == '__main__':
     main()
-

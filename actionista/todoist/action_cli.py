@@ -65,26 +65,34 @@ See also:
 """
 
 import sys
-import os
 import shlex
 import operator
 import builtins
 from dateutil import tz
 import todoist
-from todoist.models import Item, Project
-import datetime
+from todoist.models import Item
 import dateparser
 import parsedatetime  # Provides better information about the accuracy of the parsed date/time.
 import shutil
-import string
 
-from rstodo import binary_operators
-from rstodo.todoist_tasks_utils import parse_task_dates, inject_project_info, CUSTOM_FIELDS
-from rstodo.date_utils import human_date_to_iso, utc_time_to_local, local_time_to_utc, end_of_day, start_of_day
-from rstodo.date_utils import ISO_8601_FMT, DATE_DAY_FMT, TODOIST_DATE_FMT
-from rstodo.todoist import get_todoist_api, get_config, get_token
+from actionista import binary_operators
+from actionista.todoist.tasks_utils import parse_task_dates, inject_project_info, CUSTOM_FIELDS
+from actionista.date_utils import local_time_to_utc, end_of_day, start_of_day
+from actionista.date_utils import ISO_8601_FMT, DATE_DAY_FMT
+from actionista.todoist.utils import get_config, get_token
 
 NEWLINE = '\n'
+DEFAULT_TASK_PRINT_FMT = (
+    "{project_name:15} "
+    "{due_date_safe_dt:%Y-%m-%d %H:%M}  "
+    "{priority_str} "
+    "{checked_str} "
+    "{content} "
+    "(due: {date_string!r})"
+)
+# print_fmt="{project_name:15} {due_date_safe_dt:%Y-%m-%d %H:%M  } {content}",
+# print_fmt="{project_name:15} {due_date_safe_dt:%Y-%m-%d %H:%M}  {checked_str} {content}",
+# print_fmt="{project_name:15} {due_date_safe_dt:%Y-%m-%d %H:%M}  {priority_str} {checked_str} {content}",
 
 
 def parse_argv(argv=None):
@@ -165,10 +173,7 @@ def get_task_value(task, taskkey, default=None, coerce_type=None):
 
 def print_tasks(
         tasks,
-        # print_fmt="{project_name:15} {due_date_safe_dt:%Y-%m-%d %H:%M  } {content}",
-        # print_fmt="{project_name:15} {due_date_safe_dt:%Y-%m-%d %H:%M}  {checked_str} {content}",
-        # print_fmt="{project_name:15} {due_date_safe_dt:%Y-%m-%d %H:%M}  {priority_str} {checked_str} {content}",
-        print_fmt="{project_name:15} {due_date_safe_dt:%Y-%m-%d %H:%M}  {priority_str} {checked_str} {content} (due: {date_string!r})",
+        print_fmt=DEFAULT_TASK_PRINT_FMT,
         header=None,  sep="\n"
 ):
     """ Print tasks, using a python format string.
@@ -247,6 +252,11 @@ def sort_tasks(tasks, keys="project_name,priority_str,item_order", order="ascend
 
 def filter_tasks(tasks, taskkey, op_name, value, missing="exclude", default=None, value_transform=None, negate=False):
     """ Generic task filtering method based on comparison with a specific task attribute.
+
+    CLI signature:
+        $ todoist-action-cli -filter <taskkey> <operator> <value> <missing> <default> <transform> <negate>
+    e.g.
+        $ todoist-action-cli -filter project_id eq 2076120802 exclude none int
 
     Args:
         tasks: List of tasks (dicts or todoist.Item).
@@ -616,15 +626,22 @@ def priority_str_eq_filter(tasks, value, *args):
     """ Convenience filter action using taskkey="priority_str", op_name="eq". """
     return filter_tasks(tasks, taskkey="priority_str", op_name="eq", value=value, *args)
 
+
 def p1_filter(tasks, *args):
     """ Filter tasks including only tasks with priority 'p1'. """
     return priority_str_eq_filter(tasks, value="p1", *args)
+
+
 def p2_filter(tasks, *args):
     """ Filter tasks including only tasks with priority 'p2'. """
     return priority_str_eq_filter(tasks, value="p2", *args)
+
+
 def p3_filter(tasks, *args):
     """ Filter tasks including only tasks with priority 'p3'. """
     return priority_str_eq_filter(tasks, value="p3", *args)
+
+
 def p4_filter(tasks, *args):
     """ Filter tasks including only tasks with priority 'p3'. """
     return priority_str_eq_filter(tasks, value="p4", *args)
@@ -691,7 +708,7 @@ def reschedule_tasks(tasks, new_date, timezone='date_string', update_local=False
         # But using date_string may overwrite recurring tasks?
         # For now, just re-set time manually if new_date_str is "today", "tomorrow", etc.
         if new_date_str in ('today', 'tomorrow') or 'days' in new_date_str:
-            new_date = new_date.replace(hour=23, minute=59, second=59)  # The second is actually the important part for Todoist.
+            new_date = new_date.replace(hour=23, minute=59, second=59)  # The second is the important part for Todoist.
         # For more advanced, either use a different date parsing library, or use pendulum to shift the date.
         # Alternatively, use e.g. parsedatetime, which supports "eod tomorrow".
     if new_date.tzinfo is None:
@@ -726,7 +743,7 @@ def update_tasks(tasks):
         That is just insane.
 
     """
-    pass
+    return tasks
 
 
 def mark_tasks_completed(tasks, method='close'):
@@ -745,13 +762,19 @@ def mark_tasks_completed(tasks, method='close'):
     See: https://developer.todoist.com/sync/v7/#complete-items
 
     Args:
-        tasks:
+        tasks:  List of tasks.
+        method: The method used to close the task.
+            There are several meanings of marking a task as completed, especially for recurring tasks.
 
     Returns:
+        tasks:  List of tasks (after closing them).
 
     """
     for task in tasks:
-        task.close()
+        if method == 'close':
+            task.close()
+        else:
+            raise ValueError(f"Value for method = {method!r} not recognized!")
     return tasks
 
 
@@ -761,7 +784,8 @@ def fetch_completed_tasks(tasks):
     You should probably use the old CLI instead:
         $ todoist print-completed-today --print-fmt "* {title}"
     """
-    from rstodo.todoist import completed_get_all
+    print(f"Discarting the current {len(tasks)} tasks, and fetching completed tasks instead...")
+    from actionista.todoist.adhoc_cli import completed_get_all
     # This will use a different `api` object instance to fetch completed tasks:
     tasks, projects = completed_get_all()
     inject_project_info(tasks, projects)
@@ -811,7 +835,6 @@ ACTIONS = {
     'reschedule': reschedule_tasks,
     'mark-completed': mark_tasks_completed,
     'mark-as-done': mark_tasks_completed,
-    # 'sync': sync,
     # 'fetch-completed': fetch_completed_tasks,  # WARNING: Not sure how this works, but probably doesn't work well.
     # The following actions are overwritten when the api object is created inside the action_cli() function:
     'verbose': None, 'v': None,
@@ -998,10 +1021,7 @@ def action_cli(argv=None, verbose=0):
 
     """
     (base_args, base_kwargs), action_groups = parse_argv(argv=argv)
-    # print("Action groups:")
-    # print("\n".join(str(group) for group in action_groups))
 
-    # api = get_todoist_api()
     config = get_config() or {}
     config.update(base_kwargs)
     token = get_token(raise_if_missing=True, config=config)
@@ -1015,33 +1035,22 @@ def action_cli(argv=None, verbose=0):
     # Regarding caching:
     # By default, TodoistAPI.__init__ will load cache files (.json and .sync) from path given by `cache` parameter.
     # api.sync() will invoke `_write_cache()` after `_post()` and `_update_state()`.
-
     # api.sync()  # Sync not always strictly needed; can load values from cache, e.g. for testing.
 
-    # print()
-    # return
     # The Todoist v7 python API is a bit of a mess:
     # api.items is not a list of items, but the ItemsManager.
     # To get actual list of items, use `api.state['items']`.
-    items_manager = api.items
     # api._update_state creates object instances from the data as defined in `resp_models_mapping`,
     # so we should have `todoist.model.Item` object instances (not just the dicts received from the server):
-    tasks = api.state['items']
+    task_itemss = api.state['items']
 
     # Inject project info, so we can access e.g. task['project_name']:
     if verbose >= 1:
         print("Injecting project info...")
-    inject_project_info(tasks=tasks, projects=api.projects.all())
+    inject_project_info(tasks=task_itemss, projects=api.projects.all())
     if verbose >= 2:
         print("Parsing dates and creating ISO strings...")
-    parse_task_dates(tasks, strict=False)
-
-    # print("Tasks:", len(tasks))
-    # print(tasks)
-
-    # TODO: Invoking `sync` will invoke _write_cache, which has problems persisting datetime objects.
-    # There doesn't seem to be a problem server-wise (it only sends the queued commands).
-    #
+    parse_task_dates(task_itemss, strict=False)
 
     def increment_verbosity(tasks):
         """ Increase program informational output verbosity. """
@@ -1067,12 +1076,15 @@ def action_cli(argv=None, verbose=0):
         Note: api.sync() without arguments will just fetch updates (no commit of local changes).
         """
         # Remove custom fields (in preparation for JSON serialization during `_write_cache()`:
+        n_before = len(tasks)
         print("\nSyncing... (fetching updates FROM the server; use `commit` to push changes!\n")
         for task in api.state['items']:
             for k in CUSTOM_FIELDS:
                 task.data.pop(k, None)  # pop(k, None) returns None if key doesn't exists, unlike `del task[k]`.
         api.sync()
         tasks = api.state['items']
+        n_after = len(tasks)
+        print(f" - {n_after} tasks after sync ({n_before} tasks in the task list before sync).")
         parse_task_dates(tasks)
         inject_project_info(tasks=tasks, projects=api.projects.all())
         return tasks
@@ -1148,16 +1160,19 @@ def action_cli(argv=None, verbose=0):
         print("ERRROR, the following actions were not recognized:", unrecognized_actions)
         return
 
+    if len(action_groups) == 0:
+        # Print default help
+        action_groups.append(('help', [], {}))
+
     # For each action in the action chain, invoke the action providing the (remaining) tasks as first argument.
     for action_key, action_args, action_kwargs in action_groups:
-        n_tasks = len(tasks)
+        n_tasks = len(task_itemss)
         if verbose >= 2:
             print(f"\nInvoking '{action_key}' action on {n_tasks} tasks with args: {action_args!r}\n")
         action_func = ACTIONS[action_key]
-        tasks = action_func(tasks, *action_args, **action_kwargs)
-        assert tasks is not None
+        task_itemss = action_func(task_itemss, *action_args, **action_kwargs)
+        assert task_itemss is not None
 
 
 if __name__ == '__main__':
     action_cli()
-

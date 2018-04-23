@@ -1,43 +1,69 @@
-from distutils.core import setup
+# from distutils.core import setup
+from setuptools import setup, find_packages
+
+
+# Note: Make sure to use `pip -v` when pip-installing, so you can check what is being installed.
+
+# Note: I like the "action-cli" approach so much that I am planning to use it for other "query-oriented" CLI projects.
+# Thus, there will be a shared 'actionista-base' package that provides the basic "action-chain" functionalities,
+# with specialized, domain-specific packages on top.
+
+# Regarding shared namespace between multiple distribution packages (project distributions?):
+# * Put `__import__('pkg_resources').declare_namespace(__name__)` in all `actionista.__init__.py` files.
+# * Add `namespace_packages =["rewind"]` argument to `setuptools.setup(...)` invocation in `setup.py`.
+# * c.f. https://stackoverflow.com/a/12508037/3241277
+# * c.f. http://setuptools.readthedocs.io/en/latest/setuptools.html
+# * c.f. https://packaging.python.org/guides/packaging-namespace-packages/
+
+try:
+    long_description = open('README.rst').read()
+except IOError:
+    long_description = None
+"""
+Actionista Action-Chain CLI for Todoist (actionista-todoist). 
+
+A `find`-inspired CLI for Todoist.
+
+See `README.rst` for usage.
+
+"""
 
 
 setup(
-    name='rstodo',
-    version='0.0.4',
-    packages=['rstodo'],  # List all packages (directories) to include in the source dist.
-    url='github.com/scholer/rstodo',
+    name='actionista-todoist',
+    version='0.5.1',
+    packages=find_packages(),  # List all packages (directories) to include in the source dist.
+    url='https://github.com/scholer/actionista-todoist',
     license='GPLv3',
     author='Rasmus Scholer Sorensen',
     author_email='rasmusscholer@gmail.com',
-    description='Tools to interact with my todo list (Todoist, mostly).',
+    description='Actionista Action-Chain CLI for Todoist (actionista-todoist). A `find`-inspired CLI for Todoist.',
+    long_description=long_description,
     keywords=['Productivity', 'TODO', 'Todoist', 'GTD', 'Rewards', 'Tasks', 'CLI'],
     entry_points={
         'console_scripts': [
-            'todoist=rstodo.todoist:main',
-            'todoist_today_or_overdue=rstodo.todoist:print_today_or_overdue_tasks',
-            'todoist-action-cli=rstodo.todoist_action_cli:action_cli'
+            'todoist-action-cli=actionista.todoist.action_cli:action_cli',
+            'todoist-adhoc=actionista.todoist.adhoc_cli:main',
+            'todoist_today_or_overdue=actionista.todoist.adhoc_cli:print_today_or_overdue_tasks',
         ],
         # 'gui_scripts': [
-        #     'AnnotateGel=gelutils.gelannotator_gui:main',
         # ]
     },
     # pip will install these modules as requirements.
     install_requires=[
-        # 'todoist',
         'todoist-python',  # official Todoist python API from Doist
         'pyyaml',
         'pytz',
+        'python-dateutil',
         'dateparser',  # Required for human_date_to_iso()
         'parsedatetime',  # Has better concept of accuracy of the parsed date/time than dateparser.
-        # 'jupyter',
-        # 'notebook'
     ],
     classifiers=[
         # How mature is this project? Common values are
         #   3 - Alpha
         #   4 - Beta
         #   5 - Production/Stable
-        'Development Status :: 3 - Alpha',
+        'Development Status :: 4 - Beta',
 
         # Indicate who your project is intended for
         'Intended Audience :: End Users/Desktop',
@@ -49,8 +75,6 @@ setup(
         # 'Topic :: Software Development :: Build Tools',
         # 'Topic :: Education',
         # 'Topic :: Scientific/Engineering',
-        # 'Topic :: Scientific/Engineering :: Bio-Informatics',
-        # 'Topic :: Scientific/Engineering :: Medical Science Apps.',
 
         # Pick your license as you wish (should match 'license' above)
         'License :: GNU Public License v3',
@@ -58,8 +82,6 @@ setup(
         # Specify the Python versions you support here. In particular, ensure
         # that you indicate whether you support Python 2, Python 3 or both.
         'Programming Language :: Python :: 3',
-        'Programming Language :: Python :: 3.3',
-        'Programming Language :: Python :: 3.4',
         'Programming Language :: Python :: 3.5',
         'Programming Language :: Python :: 3.6',
 
