@@ -1,6 +1,6 @@
 # from distutils.core import setup
 from setuptools import setup, find_packages
-
+import os
 
 # Note: Make sure to use `pip -v` when pip-installing, so you can check what is being installed.
 
@@ -14,9 +14,13 @@ from setuptools import setup, find_packages
 # * c.f. https://stackoverflow.com/a/12508037/3241277
 # * c.f. http://setuptools.readthedocs.io/en/latest/setuptools.html
 # * c.f. https://packaging.python.org/guides/packaging-namespace-packages/
+PROJECT_ROOT_DIR = os.path.abspath(os.path.dirname(__file__))
+
+# Get the long description from the README file
 
 try:
-    long_description = open('README.rst').read()
+    with open(os.path.join(PROJECT_ROOT_DIR, 'README.rst'), encoding='utf-8') as f:
+        long_description = f.read()
 except IOError:
     long_description = None
 """
@@ -58,6 +62,7 @@ setup(
         'dateparser',  # Required for human_date_to_iso()
         'parsedatetime',  # Has better concept of accuracy of the parsed date/time than dateparser.
     ],
+    python_requires='>=3.5',
     classifiers=[
         # How mature is this project? Common values are
         #   3 - Alpha
