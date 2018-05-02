@@ -169,7 +169,7 @@ def parse_task_dates(tasks, date_keys=("due_date", "date_added", "completed_date
 #     return dt
 
 
-def inject_project_info(tasks, projects):
+def inject_project_info(tasks, projects, strict=False, na='N/A'):
     """ Inject project information (name, etc) for each task, using the task's project_id.
     This makes it considerably more convenient to print tasks, when each task has the project name, etc.
     Information is injected as `task["project_%s" % k"] = v` for all key-value pairs in the task's project,
@@ -178,6 +178,10 @@ def inject_project_info(tasks, projects):
     Args:
         tasks: A list of tasks.
         projects: A dict of projects, keyed by `project_id`.
+        strict: If True, raise an error if a task's project_id is not found in the projects dict.
+        na: If, in non-strict mode, a task's project_id is not found, use this value instead.
+            It can be either a single value, which is used for the most common project fields,
+            or it can be a dict where we just do `task.update(na)`.
 
     Returns:
         None; the task dicts are updated in-place.
@@ -189,10 +193,20 @@ def inject_project_info(tasks, projects):
     for task in tasks:
         pid = task['project_id']
         # Todoist API sometimes returns string ids and sometimes integer ids.
-        project = projects[pid if pid in projects else str(pid)]
-        # If projects are Model instances, then the data dict is in the 'data' attribute (otherwise just project):
-        for k, v in getattr(project, 'data', project).items():
-            task["project_%s" % k] = v
+        try:
+            project = projects[pid if pid in projects else str(pid)]
+        except KeyError as exc:
+            if strict:
+                raise exc
+            else:
+                if isinstance(na, dict):
+                    task.update(na)
+                else:
+                    task['project_name'] = na
+        else:
+            # If projects are Model instances, then the data dict is in the 'data' attribute (otherwise just project):
+            for k, v in getattr(project, 'data', project).items():
+                task["project_%s" % k] = v
 
 
 def parse_tasks_content(tasks, task_regex=None):

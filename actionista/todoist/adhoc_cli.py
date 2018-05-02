@@ -361,6 +361,7 @@ from datetime import timezone
 import dateutil.parser
 from dateutil.parser import parse as parse_date
 from pprint import pprint
+import argparse
 
 from todoist.models import Project
 
@@ -498,7 +499,11 @@ def print_tasks(
         The processed (parsed/filtered/sorted) list of tasks.
     """
 
-    if print_fmt:
+    if print_fmt == 'pprint':
+        pprint(tasks)
+    elif print_fmt == 'repr':
+        print(tasks)
+    else:
         print(sep.join(print_fmt.format(**task) for task in tasks))
 
     return tasks
@@ -589,7 +594,11 @@ def get_overdue_items(token=None, query="overdue", incl_time=False):
     return overdue
 
 
-def completed_get_all(token=None, project_id=None, since=None, until=None, limit=None, offset=None, annotate_notes=None):
+def completed_get_all(
+        token=None, verbose=1,
+        project_id=None, since=None, until=None, limit=None, offset=None, annotate_notes=None,
+
+):
     """ Get completed items, using the 'completed/get_all' endpoint (via CompletedManager).
 
     This endpoint is more specific than the Activity Log endpoint.
@@ -633,9 +642,10 @@ def completed_get_all(token=None, project_id=None, since=None, until=None, limit
         annotate_notes=annotate_notes,
     )
     kwargs = {k: v for k, v in kwargs.items() if v is not None}
-    print("\nRetrieving completed tasks from Todoist server...")
+    if verbose:
+        print("\nRetrieving completed tasks from the Todoist `completed/get_all` endpoint...")
     res = api.completed.get_all(**kwargs)
-    from pprint import pprint; pprint(res)
+    # from pprint import pprint; pprint(res)
     return res['items'], res['projects']
 
 
@@ -682,13 +692,17 @@ def activity(
     return events
 
 
-def get_todays_completed_events(token=None):
+def get_todays_completed_events(token=None, sync=True, verbose=1):
     """ Get all today's completed events using ActivityManager (against the 'activity/get' endpoint).
     See `activity()` for info.
     Since only tasks can be completed, this is basically just another way to get completed tasks.
     Better alternative: Use `get_todays_completed_items()`, which uses the CompletedManager.
     """
     api = get_todoist_api(token)
+    if sync:
+        if verbose:
+            print("Syncing with the server...")
+        api.sync()
     kwargs = dict(
         since="{:%Y-%m-%dT06:00}".format(datetime.date.today()),
         object_type='item',
@@ -699,7 +713,7 @@ def get_todays_completed_events(token=None):
     return events
 
 
-def get_todays_completed_items(token=None):
+def get_todays_completed_items(token=None, verbose=1):
     """ Get todays completed items, using CompletedManager against the 'completed/get_all' endpoint.
     See `completed_get_all()` for info.
     Note: The completed/get_all endpoint seems to return tasks with wrong project_id values.
@@ -708,36 +722,81 @@ def get_todays_completed_items(token=None):
     # TODO: Specifying since 'today' this way is bit of a hack; only works for timezones near or west of UTC.
     # TODO: Make proper, generic way of dealing with time and time strings!
     since="{:%Y-%m-%dT06:00}".format(datetime.date.today())
-    print("Returning all completed tasks since UTC:", since)
-    return completed_get_all(since=since)
+    if verbose and verbose >= 2:
+        print("Returning all completed tasks since UTC:", since)
+    return completed_get_all(token=token, verbose=verbose, since=since)
 
 
 def print_todays_completed_items(
         token=None, print_fmt="{content}", sort_key="default",
-        add_project_info=False,
+        add_project_info=True,
 ):
-    """ Print all tasks that were completed today. """
-    # tasks, projects = get_todays_completed_items(token=token)  # currently gives tasks with erroneous project_id.
-    events = get_todays_completed_events(token=token)  # Use activity/get instead of completed/get_all.
-    # This is just very generic, and instead of returning task items, it returns generic events.
+    """ Print all tasks that were completed today.
+
+    There are at least two ways to get "completed tasks":
+
+        (a) Sync all tasks as normal and filter those that have a `completed_date` field equalling today.
+        (b) Use the `completed/get_all` endpoint.
+        (c) Use the `activity` endpoint to get 'events'.
+
+    Regarding (a), you could just use the actionista todoist-action-cli, except that the
+        `date_completed` field is always None for tasks returned by the Todoist v7.0 Sync API.
+
+    If using (b), then there seem to be an issue with some tasks having the wrong project id.
+    This can, however, be mitigated by passing `strict=False` to `inject_project_info()`.
+    The `completed/get_all` endpoint returns completed items (list) and their related projects (dict) as follows:
+        {
+          "items": [
+            { "content": "Item11", "meta_data": null, "user_id": 1855589, "task_id": 33511505, "note_count": 0,
+              "project_id": 128501470,
+              "completed_date": "Tue 17 Feb 2015 15:40:41 +0000",
+              "id": 33511505
+            }
+          ],
+          "projects": {
+            "128501470":
+            { "color": 7, "collapsed": 0, "indent": 1, "is_deleted": 0,
+              "id": 128501470, "user_id": 1855589,
+              "name": "Project1", "item_order": 36, "is_archived": 0 }
+          }
+        }
+
+    If using (c), then be aware that event data is structured differently than normal tasks:
+    Example events list with one event:
+
+        [{'event_date': 'Wed 02 May 2018 08:27:51 +0000',
+          'event_type': 'completed',
+          'extra_data': {'client': 'Mozilla/5.0; Todoist/901',
+                         'content': 'Pick up USB cable'},
+          'id': 4035856215,
+          'initiator_id': None,
+          'object_id': 2631967385,
+          'object_type': 'item',
+          'parent_item_id': None,
+          'parent_project_id': 192280257}]
+
+    """
+    # events = get_todays_completed_events(token=token)  # Use activity/get instead of completed/get_all.
+    # print("Events:")
+    # pprint(events)
+    # return
+    # The 'activity' endpoint is generic: instead of returning task items, it returns generic events.
     # The task name/content is available as event['extra_data']['content'], and
     # the task project_id is available as event['parent_project_id'].
-    # So we cannot use the event directly; we would have to transform them.
-    print("Events:")
-    pprint(events)
-    return
-    # from pprint import pprint
-    # pprint(tasks)
-    # print()
-    # pprint(projects)
+    # So we cannot use the event directly; we would have to either transform them,
+    # or use a special printer and print_fmt to print the events.
+    tasks, projects = get_todays_completed_items(token=token)  # currently gives tasks with erroneous project_id.
+    # from pprint import pprint; pprint(tasks); print(); pprint(projects)
     if add_project_info:
-        # Disabling by default, since the project_id and projects returned by api.completed.get_all()
-        # (at the completed/get_all endpoint) don't match up. The task's project_id is wrong, it seems!
+        # NOTICE: the project_id and projects returned by api.completed.get_all()
+        # don't always match up. The task's project_id is sometimes wrong!
         # http://todoist.com/API/v7/completed/get_all
         # Maybe they are just using old project_id values, but still.
         # Is the api.activity.get() endpoint at https://todoist.com/API/v7/activity/get any better?
         # Yes, it seems this gives correct project_id values for the returned tasks.
-        inject_project_info(tasks, projects)
+        # Edit: I've added a non-strict option to inject_project_info, so we can still use completed/get_all data.
+        inject_project_info(tasks, projects, strict=False)
+    print("\nToday's completed tasks:\n")
     tasks = print_tasks(tasks, print_fmt=print_fmt, sort_key=sort_key)
     return tasks
 
@@ -886,7 +945,6 @@ def print_projects(print_fmt="pprint-data", sort_key=None, sync=True, sep="\n"):
 
 
 def parse_args(argv=None):
-    import argparse
     ap = argparse.ArgumentParser(prog="RS Todoist python CLI")
     subparsers = ap.add_subparsers(dest='command')
     # There are two ways to describe which subcommand to invoke depending on the subparser argument passed by the user.
@@ -936,11 +994,19 @@ def main(argv=None):
         $ todoist print-today-or-overdue --print-fmt "* {title}"
         $ todoist print-completed-today --print-fmt "* {title}"
 
+    For CLI usage, type:
+
+        $ todoist-achoc --help
+
     """
 
     argns = parse_args(argv)
     args = vars(argns)
-    command, func = args.pop('command'), args.pop('func')  # command is the subparser name; func is the function obj.
+    command, func = args.pop('command'), args.pop('func', None)  # command = subparser name; func = function obj.
+    # If action-cli is invoked without a command argument, then func is None:
+    if func is None:
+        print(main.__doc__)
+        return
     res = func(**args)
     # print_todays_tasks()
     # print_query_result(query="(overdue | today) & #Work")  # Note: 'query' endpoint deprecated because weird results.

@@ -174,7 +174,8 @@ def get_task_value(task, taskkey, default=None, coerce_type=None):
 def print_tasks(
         tasks,
         print_fmt=DEFAULT_TASK_PRINT_FMT,
-        header=None,  sep="\n"
+        header=None,  sep="\n",
+        *, verbose=0
 ):
     """ Print tasks, using a python format string.
 
@@ -189,6 +190,8 @@ def print_tasks(
             Note: You can use print_fmt="pprint" to just print all tasks using pprint.
         header: Print a header before printing the tasks.
         sep: How to separate each printed task. Default is just "\n".
+        # Keyword only arguments:
+        verbose: The verbosity to print informational messages with during the filtering process.
 
     Returns: List of tasks.
 
@@ -216,6 +219,8 @@ def print_tasks(
         # We also have the same above fields for `date_added` and `completed_date`.
 
     """
+    if verbose > -1:
+        print(f"\n - Printing {len(tasks)} tasks using print_fmt={print_fmt!r} (sep={sep!r}).\n")
     if header:
         print(header)
     task_dicts = [task.data if isinstance(task, Item) else task for task in tasks]
@@ -227,8 +232,15 @@ def print_tasks(
     return tasks
 
 
-def sort_tasks(tasks, keys="project_name,priority_str,item_order", order="ascending"):
+def sort_tasks(tasks, keys="project_name,priority_str,item_order", order="ascending", *, verbose=0):
     """ Sort the list of tasks, by task attribute in ascending or descending order.
+
+    Args:
+        tasks:
+        keys:
+        order:
+        # Keyword only arguments:
+        verbose: The verbosity to print informational messages with during the filtering process.
 
     Examples:
 
@@ -243,6 +255,8 @@ def sort_tasks(tasks, keys="project_name,priority_str,item_order", order="ascend
         due_date,priority,item_order
 
     """
+    if verbose > -1:
+        print(f" - Sorting {len(tasks)} tasks by {keys!r} ({order}).")
     if isinstance(keys, str):
         keys = keys.split(',')
     itemgetter = operator.itemgetter(*keys)
@@ -250,7 +264,12 @@ def sort_tasks(tasks, keys="project_name,priority_str,item_order", order="ascend
     return tasks
 
 
-def filter_tasks(tasks, taskkey, op_name, value, missing="exclude", default=None, value_transform=None, negate=False):
+def filter_tasks(
+        tasks,
+        taskkey, op_name, value,
+        missing="exclude", default=None,
+        value_transform=None, negate=False,
+        *, verbose=0):
     """ Generic task filtering method based on comparison with a specific task attribute.
 
     CLI signature:
@@ -272,6 +291,7 @@ def filter_tasks(tasks, taskkey, op_name, value, missing="exclude", default=None
             So, if you want to remove/exclude tasks starting with 'Email', use:
                 -filter content startswith Email exclude _ _ True
             Note: Negate applies to the transform, but not to tasks included/excluded due to missing value.
+        verbose: The verbosity to print informational messages with during the filtering process.
 
     Returns:
         Filtered list of tasks passing the filter criteria (attribute matching value).
@@ -308,8 +328,9 @@ def filter_tasks(tasks, taskkey, op_name, value, missing="exclude", default=None
     # I'm currently negating explicitly in the all four 'missing' cases,
     # but I could also just have re-defined `op` as: `def op(a, b): return _op(a, b) != negate`
 
-    print(f" - Filtering {len(tasks)} tasks with: {taskkey!r} {op_name} {value!r} "
-          f"(missing={missing!r}, default={default!r}, value_transform={value_transform!r}, negate={negate!r})\n")
+    if verbose > -1:
+        print(f"\n - Filtering {len(tasks)} tasks with: {taskkey!r} {op_name} {value!r} "
+              f"(missing={missing!r}, default={default!r}, value_transform={value_transform!r}, negate={negate!r}).")
 
     if value_transform:
         if isinstance(value_transform, str):
@@ -433,7 +454,7 @@ def generic_args_filter_adaptor(tasks, taskkey, args, *, default_op='iglob', **k
     return filter_tasks(tasks, taskkey=taskkey, op_name=op_name, value=value, negate=negate, *args, **kwargs)
 
 
-def special_is_filter(tasks, *args):
+def special_is_filter(tasks, *args, **kwargs):
     """ Special -is filter for ad-hoc or frequently-used cases, e.g. `-is not checked`, etc.
 
     These are generally implemented on an as-needed basis.
@@ -502,9 +523,9 @@ def special_is_filter(tasks, *args):
         utc_str = local_time_to_utc(dt, fmt=timefmt)
         # date_value_iso = dt.strftime(timefmt)
         # When we request tasks that are due, we don't want completed tasks, so remove these first:
-        tasks = filter_tasks(tasks, taskkey="checked", op_name="eq", value=0, missing="include")
+        tasks = filter_tasks(tasks, taskkey="checked", op_name="eq", value=0, missing="include", **kwargs)
         # Then return tasks that are due as requested:
-        return filter_tasks(tasks, taskkey=taskkey, op_name=op_name, value=utc_str, negate=negate)
+        return filter_tasks(tasks, taskkey=taskkey, op_name=op_name, value=utc_str, negate=negate, **kwargs)
     elif args[0] in ('checked', 'unchecked', 'complete', 'incomplete', 'completed', 'done'):
         # -is not checked
         if args[0][:2] in ('in', 'un'):
@@ -513,12 +534,12 @@ def special_is_filter(tasks, *args):
             checked_val = 1
         taskkey = "checked"
         op_name = "eq"
-        return filter_tasks(tasks, taskkey=taskkey, op_name=op_name, value=checked_val, negate=negate)
+        return filter_tasks(tasks, taskkey=taskkey, op_name=op_name, value=checked_val, negate=negate, **kwargs)
     elif args[0] == 'in':
         taskkey = "project_name"
         op_name = "eq"
         value = args[1]
-        return filter_tasks(tasks, taskkey=taskkey, op_name=op_name, value=value, negate=negate)
+        return filter_tasks(tasks, taskkey=taskkey, op_name=op_name, value=value, negate=negate, **kwargs)
     elif args[0] == 'recurring':
         """ `-is [not] recurring` filter.
         NOTE: The 'is_recurring' attribute is not officially exposed and "may be removed soon",
@@ -530,124 +551,125 @@ def special_is_filter(tasks, *args):
         # value = 1
         # return filter_tasks(tasks, taskkey=taskkey, op_name=op_name, value=value, negate=negate)
         # -is not recurring : for recurring task : negate==True, startswith('every')==True => startswith == negate
-        print(f" - Filtering {len(tasks)} tasks, excluding {'' if negate else 'non-'}recurring tasks...\n")
+        print(f"\n - Filtering {len(tasks)} tasks, excluding {'' if negate else 'non-'}recurring tasks...\n")
         return [task for task in tasks
                 if str(get_task_value(task, 'date_string')).lower().startswith('every') is not negate]
     else:
         raise ValueError("`-is` parameter %r not recognized. (args = %r)" % (args[0], args))
 
 
-def is_not_filter(tasks, *args):
+def is_not_filter(tasks, *args, **kwargs):
     """ Convenience `-not` action, just an alias for `-is not`. Can be used as e.g. `-not recurring`."""
     args = ['not'] + list(args)
-    return special_is_filter(tasks, *args)
+    return special_is_filter(tasks, *args, **kwargs)
 
 
-def due_date_filter(tasks, *when):
+def due_date_filter(tasks, *when, **kwargs):
     """ Special `-due [when]` filter. Is just an alias for `-is due [when]`. """
     args = ['due'] + list(when)  # Apparently *args is a tuple, not a list.
-    return special_is_filter(tasks, *args)
+    return special_is_filter(tasks, *args, **kwargs)
 
 
-def content_filter(tasks, *args):
+def content_filter(tasks, *args, **kwargs):
     """ Convenience adaptor to filter tasks based on the 'content' attribute (default op_name 'iglob'). """
-    return generic_args_filter_adaptor(tasks=tasks, taskkey='content', args=args)
+    return generic_args_filter_adaptor(tasks=tasks, taskkey='content', args=args, **kwargs)
 
 
-def content_contains_filter(tasks, value, *args):
+def content_contains_filter(tasks, value, *args, **kwargs):
     """ Convenience filter action using taskkey="content", op_name="contains". """
-    return filter_tasks(tasks, taskkey="content", op_name="contains", value=value, *args)
+    return filter_tasks(tasks, taskkey="content", op_name="contains", value=value, *args, **kwargs)
 
 
-def content_startswith_filter(tasks, value, *args):
+def content_startswith_filter(tasks, value, *args, **kwargs):
     """ Convenience filter action using taskkey="content", op_name="startswith". """
-    return filter_tasks(tasks, taskkey="content", op_name="startswith", value=value, *args)
+    return filter_tasks(tasks, taskkey="content", op_name="startswith", value=value, *args, **kwargs)
 
 
-def content_endswith_filter(tasks, value, *args):
+def content_endswith_filter(tasks, value, *args, **kwargs):
     """ Convenience filter action using taskkey="content", op_name="endswith"."""
-    return filter_tasks(tasks, taskkey="content", op_name="endswith", value=value, *args)
+    return filter_tasks(tasks, taskkey="content", op_name="endswith", value=value, *args, **kwargs)
 
 
-def content_glob_filter(tasks, value, *args):
+def content_glob_filter(tasks, value, *args, **kwargs):
     """ Convenience filter action using taskkey="content", op_name="glob". """
-    return filter_tasks(tasks, taskkey="content", op_name="glob", value=value, *args)
+    return filter_tasks(tasks, taskkey="content", op_name="glob", value=value, *args, **kwargs)
 
 
-def content_iglob_filter(tasks, value, *args):
+def content_iglob_filter(tasks, value, *args, **kwargs):
     """ Convenience filter action using taskkey="content", op_name="iglob". """
-    return filter_tasks(tasks, taskkey="content", op_name="iglob", value=value, *args)
+    return filter_tasks(tasks, taskkey="content", op_name="iglob", value=value, *args, **kwargs)
 
 
-def content_eq_filter(tasks, value, *args):
+def content_eq_filter(tasks, value, *args, **kwargs):
     """ Convenience filter action using taskkey="content", op_name="eq". """
-    return filter_tasks(tasks, taskkey="content", op_name="eq", value=value, *args)
+    return filter_tasks(tasks, taskkey="content", op_name="eq", value=value, *args, **kwargs)
 
 
-def content_ieq_filter(tasks, value, *args):
+def content_ieq_filter(tasks, value, *args, **kwargs):
     """ Convenience filter action using taskkey="content", op_name="ieq". """
-    return filter_tasks(tasks, taskkey="content", op_name="ieq", value=value, *args)
+    return filter_tasks(tasks, taskkey="content", op_name="ieq", value=value, *args, **kwargs)
 
 
-def project_filter(tasks, *args):
+def project_filter(tasks, *args, **kwargs):
     """ Convenience adaptor for filter action using taskkey="project_name" (default op_name "iglob"). """
-    return generic_args_filter_adaptor(tasks=tasks, taskkey='project_name', args=args)
+    return generic_args_filter_adaptor(tasks=tasks, taskkey='project_name', args=args, **kwargs)
 
 
-def project_iglob_filter(tasks, value, *args):
+def project_iglob_filter(tasks, value, *args, **kwargs):
     """ Convenience filter action using taskkey="content", op_name="iglob". """
-    return filter_tasks(tasks, taskkey="project_name", op_name="iglob", value=value, *args)
+    return filter_tasks(tasks, taskkey="project_name", op_name="iglob", value=value, *args, **kwargs)
 
 
-def priority_filter(tasks, *args):
+def priority_filter(tasks, *args, **kwargs):
     """ Convenience adaptor for filter action using taskkey="priority" (default op_name "eq"). """
-    return generic_args_filter_adaptor(tasks=tasks, taskkey='priority', args=args, default_op='eq', value_transform=int)
+    return generic_args_filter_adaptor(
+        tasks=tasks, taskkey='priority', args=args, default_op='eq', value_transform=int, **kwargs)
 
 
-def priority_ge_filter(tasks, value, *args):
+def priority_ge_filter(tasks, value, *args, **kwargs):
     """ Convenience filter action using taskkey="priority", op_name="ge". """
     value = int(value)
-    return filter_tasks(tasks, taskkey="priority", op_name="ge", value=value, *args)
+    return filter_tasks(tasks, taskkey="priority", op_name="ge", value=value, *args, **kwargs)
 
 
-def priority_eq_filter(tasks, value, *args):
+def priority_eq_filter(tasks, value, *args, **kwargs):
     """ Convenience filter action using taskkey="priority", op_name="eq". """
     value = int(value)
-    return filter_tasks(tasks, taskkey="priority", op_name="eq", value=value, *args)
+    return filter_tasks(tasks, taskkey="priority", op_name="eq", value=value, *args, **kwargs)
 
 
-def priority_str_filter(tasks, *args):
+def priority_str_filter(tasks, *args, **kwargs):
     """ Convenience adaptor for filter action using taskkey="priority_str" (default op_name "eq"). """
     # return filter_tasks(tasks, taskkey="priority_str", op_name="eq", value=value, *args)
-    return generic_args_filter_adaptor(tasks=tasks, taskkey='priority_str', args=args, default_op='eq')
+    return generic_args_filter_adaptor(tasks=tasks, taskkey='priority_str', args=args, default_op='eq', **kwargs)
 
 
-def priority_str_eq_filter(tasks, value, *args):
+def priority_str_eq_filter(tasks, value, *args, **kwargs):
     """ Convenience filter action using taskkey="priority_str", op_name="eq". """
-    return filter_tasks(tasks, taskkey="priority_str", op_name="eq", value=value, *args)
+    return filter_tasks(tasks, taskkey="priority_str", op_name="eq", value=value, *args, **kwargs)
 
 
-def p1_filter(tasks, *args):
+def p1_filter(tasks, *args, **kwargs):
     """ Filter tasks including only tasks with priority 'p1'. """
-    return priority_str_eq_filter(tasks, value="p1", *args)
+    return priority_str_eq_filter(tasks, value="p1", *args, **kwargs)
 
 
-def p2_filter(tasks, *args):
+def p2_filter(tasks, *args, **kwargs):
     """ Filter tasks including only tasks with priority 'p2'. """
-    return priority_str_eq_filter(tasks, value="p2", *args)
+    return priority_str_eq_filter(tasks, value="p2", *args, **kwargs)
 
 
-def p3_filter(tasks, *args):
+def p3_filter(tasks, *args, **kwargs):
     """ Filter tasks including only tasks with priority 'p3'. """
-    return priority_str_eq_filter(tasks, value="p3", *args)
+    return priority_str_eq_filter(tasks, value="p3", *args, **kwargs)
 
 
-def p4_filter(tasks, *args):
+def p4_filter(tasks, *args, **kwargs):
     """ Filter tasks including only tasks with priority 'p3'. """
-    return priority_str_eq_filter(tasks, value="p4", *args)
+    return priority_str_eq_filter(tasks, value="p4", *args, **kwargs)
 
 
-def reschedule_tasks(tasks, new_date, timezone='date_string', update_local=False):
+def reschedule_tasks(tasks, new_date, timezone='date_string', update_local=False, *, verbose=0):
     """ Reschedule tasks to a new date/time.
 
     Example: Reschedule overdue tasks for tomorrow
@@ -683,8 +705,9 @@ def reschedule_tasks(tasks, new_date, timezone='date_string', update_local=False
         * The web client doesn't send "next sunday" date strings any more. The client is in charge of parsing
             the date and sending a valid date. The due.string was set to "15 Apr".
     """
-    print("\n\nRescheduling %s tasks for %r..." % (len(tasks), new_date))
-    print(" - Remember to use `-commit` to push the changes (not `-sync`)!\n\n")
+    if verbose > -1:
+        print("\n - Rescheduling %s tasks for %r..." % (len(tasks), new_date))
+        print(" - Remember to use `-commit` to push the changes (not `-sync`)!\n\n")
     if timezone == 'date_string':  # Making this the default
         # Special case; instead of updating the due_date_utc, just send `date_string` to server.
         # Note: For non-repeating tasks, this is certainly by far the simplest way to update due dates.
@@ -731,7 +754,7 @@ def reschedule_tasks(tasks, new_date, timezone='date_string', update_local=False
     return tasks
 
 
-def update_tasks(tasks):
+def update_tasks(tasks, *, verbose=0):
     """ Generic task updater.
 
     Todoist task updating caveats:
@@ -746,7 +769,7 @@ def update_tasks(tasks):
     return tasks
 
 
-def mark_tasks_completed(tasks, method='close'):
+def mark_tasks_completed(tasks, method='close', *, verbose=0):
     """ Mark tasks as completed using method='close'.
 
     Note: The Todoist v7 Sync API has two command types for completing tasks:
@@ -778,7 +801,7 @@ def mark_tasks_completed(tasks, method='close'):
     return tasks
 
 
-def fetch_completed_tasks(tasks):
+def fetch_completed_tasks(tasks, *, verbose=0):
     """ This will replace `tasks` with a list of completed tasks dicts. May not work nicely. Only for playing around.
 
     You should probably use the old CLI instead:
@@ -1052,7 +1075,7 @@ def action_cli(argv=None, verbose=0):
         print("Parsing dates and creating ISO strings...")
     parse_task_dates(task_itemss, strict=False)
 
-    def increment_verbosity(tasks):
+    def increment_verbosity(tasks, *kwargs):
         """ Increase program informational output verbosity. """
         # If you modify (reassign) an immutable type within a closure, it is by default considered a local variable.
         # To prevent this, declare that the variable is non-local:
@@ -1063,7 +1086,7 @@ def action_cli(argv=None, verbose=0):
 
     ask_before_commit = True
 
-    def disable_confirmation_prompt(tasks):
+    def disable_confirmation_prompt(tasks, **kwargs):
         """ Disable confirmation prompt before enacting irreversible commands, e.g. -commit. """
         nonlocal ask_before_commit
         ask_before_commit = False
@@ -1071,7 +1094,7 @@ def action_cli(argv=None, verbose=0):
     ACTIONS['y'] = ACTIONS['yes'] = ACTIONS['no-prompt'] = disable_confirmation_prompt
 
     # Better to define sync here rather than relying on getting api from existing task
-    def sync(tasks):
+    def sync(tasks, **kwargs):
         """ Pull task updates from the server to synchronize the local task data cache.
         Note: api.sync() without arguments will just fetch updates (no commit of local changes).
         """
@@ -1090,7 +1113,7 @@ def action_cli(argv=None, verbose=0):
         return tasks
     ACTIONS['sync'] = sync
 
-    def commit(tasks, *, raise_on_error=True):
+    def commit(tasks, *, raise_on_error=True, verbose=0):
         """ Commit is a sync that includes local commands from the queue, emptying the queue. Raises SyncError. """
         # Prompt if needed:
         if ask_before_commit:
@@ -1112,7 +1135,7 @@ def action_cli(argv=None, verbose=0):
     ACTIONS['commit'] = commit
 
     # Better to define sync here rather than relying on getting api from existing task
-    def show_queue(tasks):
+    def show_queue(tasks, *, verbose=0):
         """ Show list of API commands in the POST queue. """
         # Remove custom fields (in preparation for JSON serialization during `_write_cache()`:
         from pprint import pprint
@@ -1122,7 +1145,7 @@ def action_cli(argv=None, verbose=0):
     ACTIONS['show-queue'] = show_queue
     ACTIONS['print-queue'] = show_queue
 
-    def delete_cache(tasks):
+    def delete_cache(tasks, *, verbose=0):
         """ Delete local todoist data cache.
         Should be done periodically, and especially if you start to experience any unusual behaviour.
         """
@@ -1134,7 +1157,7 @@ def action_cli(argv=None, verbose=0):
         return tasks
     ACTIONS['delete-cache'] = delete_cache
 
-    def print_help(tasks, cmd=None):
+    def print_help(tasks, cmd=None, *, verbose=0):
         """ Print help messages. Use `-help <action>` to get help on a particular action. """
         # import re
         # print(repr(action_cli.__doc__))  # Nope, escapes proper line breaks.
@@ -1175,11 +1198,11 @@ argument to convert input values to e.g. integers.
             else:
                 print(ACTIONS[cmd].__doc__)
         return tasks
-    ACTIONS['h'] = ACTIONS['help'] = print_help
+    ACTIONS['h'] = ACTIONS['help'] = ACTIONS['-help'] = print_help
 
     unrecognized_actions = [agroup[0] for agroup in action_groups if agroup[0] not in ACTIONS]
     if unrecognized_actions:
-        print("ERRROR, the following actions were not recognized:", unrecognized_actions)
+        print("\nERRROR, the following actions were not recognized:", unrecognized_actions)
         return
 
     if len(action_groups) == 0:
@@ -1189,10 +1212,10 @@ argument to convert input values to e.g. integers.
     # For each action in the action chain, invoke the action providing the (remaining) tasks as first argument.
     for action_key, action_args, action_kwargs in action_groups:
         n_tasks = len(task_itemss)
-        if verbose >= 2:
+        if verbose >= 1:
             print(f"\nInvoking '{action_key}' action on {n_tasks} tasks with args: {action_args!r}\n")
         action_func = ACTIONS[action_key]
-        task_itemss = action_func(task_itemss, *action_args, **action_kwargs)
+        task_itemss = action_func(task_itemss, *action_args, verbose=verbose, **action_kwargs)
         assert task_itemss is not None
 
 

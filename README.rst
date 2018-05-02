@@ -3,7 +3,8 @@
 Actionista Action-Chain CLI for Todoist (actionista-todoist)
 ============================================================
 
-A ``find``-inspired "action chain" command line tool for managing your Todoist task list.
+*Actionista* Action-Chain CLI for Todoist (actionista-todoist)
+is a ``find``-inspired "action chain" command line tool for managing your Todoist task list.
 
 The successful ``find`` utility works by supplying a sequence of "actions"
 (also known as "expressions" in the ``find`` manual).
@@ -12,7 +13,7 @@ However, the real usability of ``find`` is that it can not only print the matchi
 but also use the matching files for other actions, e.g. deleting the files,
 or sending them to other command line tools.
 
-The actionista action-chain CLI takes a similar approach.
+The *actionista* action-chain CLI takes a similar approach.
 Starting from the full list of tasks, you can apply filters to find exactly those tasks that you need.
 Together with other actions, you can ``print``, ``reschedule``, ``rename``, ``mark-complete``, or ``delete``
 whatever tasks you need.
@@ -30,8 +31,11 @@ but you are basically free to list as many (or as few) actions as you want or ne
 For the record, doing the described sequence of actions would look something like this::
 
     $ todoist-action-cli -project Wedding -print \
-        -due before today -print -reschedule tomorrow
-        -name startswith "Pick up the rings" -rename "Remind Tommy to pick up the rings"
+        -due before today \
+        -print \
+        -reschedule tomorrow \
+        -name startswith "Pick up the rings" \
+        -rename "Remind Tommy to pick up the rings" \
         -commit
 
 

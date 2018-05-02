@@ -39,18 +39,19 @@ See `README.rst` for usage.
 #   twine upload dist/*
 setup(
     name='actionista-todoist',
-    version='0.5.2dev1',
+    version='0.5.3dev1',
     packages=find_packages(),  # List all packages (directories) to include in the source dist.
     url='https://github.com/scholer/actionista-todoist',
     license='GNU General Public License v3 (GPLv3)',
     author='Rasmus Scholer Sorensen',
     author_email='rasmusscholer@gmail.com',
-    description='Actionista Action-Chain CLI for Todoist (actionista-todoist). A `find`-inspired CLI for Todoist.',
+    description='Actionista Action-Chain CLI for Todoist. Inspired by the UNIX tool "find".',
     long_description=long_description,
     keywords=['Productivity', 'TODO', 'Todoist', 'GTD', 'Rewards', 'Tasks', 'CLI'],
     entry_points={
         'console_scripts': [
             'todoist-action-cli=actionista.todoist.action_cli:action_cli',
+            'actionista-todoist=actionista.todoist.action_cli:action_cli',  # New alias
             'todoist-adhoc=actionista.todoist.adhoc_cli:main',
             'todoist_today_or_overdue=actionista.todoist.adhoc_cli:print_today_or_overdue_tasks',
         ],
