@@ -220,7 +220,7 @@ def print_tasks(
 
     """
     if verbose > -1:
-        print(f"\n - Printing {len(tasks)} tasks using print_fmt={print_fmt!r} (sep={sep!r}).\n")
+        print(f"\n - Printing {len(tasks)} tasks separated by {sep!r}, using print_fmt:\n{print_fmt!r} ().\n")
     if header:
         print(header)
     task_dicts = [task.data if isinstance(task, Item) else task for task in tasks]

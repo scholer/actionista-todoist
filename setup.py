@@ -53,6 +53,7 @@ setup(
             'todoist-action-cli=actionista.todoist.action_cli:action_cli',
             'actionista-todoist=actionista.todoist.action_cli:action_cli',  # New alias
             'todoist-adhoc=actionista.todoist.adhoc_cli:main',
+            'todoist-adhoc-cli=actionista.todoist.adhoc_cli:main',  # alias
             'todoist_today_or_overdue=actionista.todoist.adhoc_cli:print_today_or_overdue_tasks',
         ],
         # 'gui_scripts': [
