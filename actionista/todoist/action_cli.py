@@ -220,7 +220,8 @@ def print_tasks(
 
     """
     if verbose > -1:
-        print(f"\n - Printing {len(tasks)} tasks separated by {sep!r}, using print_fmt:\n{print_fmt!r} ().\n")
+        print(f"\n - Printing {len(tasks)} tasks",
+              f"separated by {sep!r}, using print_fmt:\n{print_fmt!r}.\n" if verbose else "...\n")
     if header:
         print(header)
     task_dicts = [task.data if isinstance(task, Item) else task for task in tasks]
@@ -551,7 +552,7 @@ def special_is_filter(tasks, *args, **kwargs):
         # value = 1
         # return filter_tasks(tasks, taskkey=taskkey, op_name=op_name, value=value, negate=negate)
         # -is not recurring : for recurring task : negate==True, startswith('every')==True => startswith == negate
-        print(f"\n - Filtering {len(tasks)} tasks, excluding {'' if negate else 'non-'}recurring tasks...\n")
+        print(f"\n - Filtering {len(tasks)} tasks, excluding {'' if negate else 'non-'}recurring tasks...")
         return [task for task in tasks
                 if str(get_task_value(task, 'date_string')).lower().startswith('every') is not negate]
     else:
@@ -1100,7 +1101,7 @@ def action_cli(argv=None, verbose=0):
         """
         # Remove custom fields (in preparation for JSON serialization during `_write_cache()`:
         n_before = len(tasks)
-        print("\nSyncing... (fetching updates FROM the server; use `commit` to push changes!\n")
+        print("\nSyncing... (fetching updates FROM the server; use `commit` to push changes!")
         for task in api.state['items']:
             for k in CUSTOM_FIELDS:
                 task.data.pop(k, None)  # pop(k, None) returns None if key doesn't exists, unlike `del task[k]`.
@@ -1121,7 +1122,7 @@ def action_cli(argv=None, verbose=0):
             if answer[0].lower() == 'n':
                 print(" - OK, ABORTING commit.")
                 return tasks
-        print(f"\nCommitting {len(api.queue)} local changes and fetching updates...\n")
+        print(f"\nCommitting {len(api.queue)} local changes and fetching updates...")
         # Remove custom fields before commit (and re-add them again afterwards)
         for task in api.state['items']:
             for k in CUSTOM_FIELDS:
@@ -1213,7 +1214,7 @@ argument to convert input values to e.g. integers.
     for action_key, action_args, action_kwargs in action_groups:
         n_tasks = len(task_itemss)
         if verbose >= 1:
-            print(f"\nInvoking '{action_key}' action on {n_tasks} tasks with args: {action_args!r}\n")
+            print(f"\nInvoking '{action_key}' action on {n_tasks} tasks with args: {action_args!r}")
         action_func = ACTIONS[action_key]
         task_itemss = action_func(task_itemss, *action_args, verbose=verbose, **action_kwargs)
         assert task_itemss is not None
