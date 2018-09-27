@@ -171,6 +171,11 @@ def get_task_value(task, taskkey, default=None, coerce_type=None):
     return task_value
 
 
+def get_recurring_tasks(tasks, negate=False):
+    return [task for task in tasks
+            if str(get_task_value(task, 'date_string')).lower().startswith('every') is not negate]
+
+
 def print_tasks(
         tasks,
         print_fmt=DEFAULT_TASK_PRINT_FMT,
@@ -221,7 +226,7 @@ def print_tasks(
     """
     if verbose > -1:
         print(f"\n - Printing {len(tasks)} tasks",
-              f"separated by {sep!r}, using print_fmt:\n{print_fmt!r}.\n" if verbose else "...\n")
+              f"separated by {sep!r}, using print_fmt:\n{print_fmt!r}.\n" if verbose else "...\n", file=sys.stderr)
     if header:
         print(header)
     task_dicts = [task.data if isinstance(task, Item) else task for task in tasks]
@@ -257,7 +262,7 @@ def sort_tasks(tasks, keys="project_name,priority_str,item_order", order="ascend
 
     """
     if verbose > -1:
-        print(f" - Sorting {len(tasks)} tasks by {keys!r} ({order}).")
+        print(f" - Sorting {len(tasks)} tasks by {keys!r} ({order}).", file=sys.stderr)
     if isinstance(keys, str):
         keys = keys.split(',')
     itemgetter = operator.itemgetter(*keys)
@@ -331,7 +336,7 @@ def filter_tasks(
 
     if verbose > -1:
         print(f"\n - Filtering {len(tasks)} tasks with: {taskkey!r} {op_name} {value!r} "
-              f"(missing={missing!r}, default={default!r}, value_transform={value_transform!r}, negate={negate!r}).")
+              f"(missing={missing!r}, default={default!r}, value_transform={value_transform!r}, negate={negate!r}).", file=sys.stderr)
 
     if value_transform:
         if isinstance(value_transform, str):
@@ -670,7 +675,7 @@ def p4_filter(tasks, *args, **kwargs):
     return priority_str_eq_filter(tasks, value="p4", *args, **kwargs)
 
 
-def reschedule_tasks(tasks, new_date, timezone='date_string', update_local=False, *, verbose=0):
+def reschedule_tasks(tasks, new_date, timezone='date_string', update_local=False, check_recurring=True, *, verbose=0):
     """ Reschedule tasks to a new date/time.
 
     Example: Reschedule overdue tasks for tomorrow
@@ -707,8 +712,14 @@ def reschedule_tasks(tasks, new_date, timezone='date_string', update_local=False
             the date and sending a valid date. The due.string was set to "15 Apr".
     """
     if verbose > -1:
-        print("\n - Rescheduling %s tasks for %r..." % (len(tasks), new_date))
-        print(" - Remember to use `-commit` to push the changes (not `-sync`)!\n\n")
+        print("\n - Rescheduling %s tasks for %r..." % (len(tasks), new_date), file=sys.stderr)
+        print(" - Remember to use `-commit` to push the changes (not `-sync`)!\n\n", file=sys.stderr)
+    if check_recurring is True:
+        recurring_tasks = get_recurring_tasks(tasks)
+        if len(recurring_tasks) > 0:
+            print("\nWARNING: One or more of the tasks being rescheduled is recurring:")
+            print_tasks(recurring_tasks)
+            print("\n")
     if timezone == 'date_string':  # Making this the default
         # Special case; instead of updating the due_date_utc, just send `date_string` to server.
         # Note: For non-repeating tasks, this is certainly by far the simplest way to update due dates.
@@ -1070,10 +1081,10 @@ def action_cli(argv=None, verbose=0):
 
     # Inject project info, so we can access e.g. task['project_name']:
     if verbose >= 1:
-        print("Injecting project info...")
+        print("Injecting project info...", file=sys.stderr)
     inject_project_info(tasks=task_itemss, projects=api.projects.all())
     if verbose >= 2:
-        print("Parsing dates and creating ISO strings...")
+        print("Parsing dates and creating ISO strings...", file=sys.stderr)
     parse_task_dates(task_itemss, strict=False)
 
     def increment_verbosity(tasks, *kwargs):
@@ -1214,7 +1225,7 @@ argument to convert input values to e.g. integers.
     for action_key, action_args, action_kwargs in action_groups:
         n_tasks = len(task_itemss)
         if verbose >= 1:
-            print(f"\nInvoking '{action_key}' action on {n_tasks} tasks with args: {action_args!r}")
+            print(f"\nInvoking '{action_key}' action on {n_tasks} tasks with args: {action_args!r}", file=sys.stderr)
         action_func = ACTIONS[action_key]
         task_itemss = action_func(task_itemss, *action_args, verbose=verbose, **action_kwargs)
         assert task_itemss is not None
