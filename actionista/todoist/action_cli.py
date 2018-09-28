@@ -456,7 +456,8 @@ def generic_args_filter_adaptor(tasks, taskkey, args, *, default_op='iglob', **k
     else:
         # `-content startswith work`
         op_name, value, *args = args
-    print(f"generic_args_filter_adaptor: args={args}")
+
+    # print(f"generic_args_filter_adaptor: args={args}")  # debugging
     return filter_tasks(tasks, taskkey=taskkey, op_name=op_name, value=value, negate=negate, *args, **kwargs)
 
 
