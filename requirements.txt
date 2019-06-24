@@ -1,0 +1,14 @@
+idna
+urllib3
+chardet
+requests
+todoist-python
+pyyaml
+pytz
+six
+python-dateutil
+tzlocal
+regex
+dateparser
+future
+parsedatetime
