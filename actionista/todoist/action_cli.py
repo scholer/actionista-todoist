@@ -74,6 +74,7 @@ from todoist.models import Item
 import dateparser
 import parsedatetime  # Provides better information about the accuracy of the parsed date/time.
 import shutil
+from pprint import pprint
 
 from actionista import binary_operators
 from actionista.todoist.tasks_utils import parse_task_dates, inject_project_info, CUSTOM_FIELDS
@@ -649,7 +650,9 @@ def priority_eq_filter(tasks, value, *args, **kwargs):
 def priority_str_filter(tasks, *args, **kwargs):
     """ Convenience adaptor for filter action using taskkey="priority_str" (default op_name "eq"). """
     # return filter_tasks(tasks, taskkey="priority_str", op_name="eq", value=value, *args)
-    return generic_args_filter_adaptor(tasks=tasks, taskkey='priority_str', args=args, default_op='eq', **kwargs)
+    return generic_args_filter_adaptor(
+        tasks=tasks, taskkey='priority_str', args=args, default_op='eq', **kwargs
+    )
 
 
 def priority_str_eq_filter(tasks, value, *args, **kwargs):
@@ -677,7 +680,10 @@ def p4_filter(tasks, *args, **kwargs):
     return priority_str_eq_filter(tasks, value="p4", *args, **kwargs)
 
 
-def reschedule_tasks(tasks, new_date, timezone='date_string', update_local=False, check_recurring=True, *, verbose=0):
+def reschedule_tasks(
+        tasks, new_date, timezone='date_string', update_local=False, check_recurring=True, *,
+        verbose=0
+):
     """ Reschedule tasks to a new date/time.
 
     Example: Reschedule overdue tasks for tomorrow
@@ -1192,6 +1198,7 @@ def action_cli(argv=None, verbose=0):
         nonlocal ask_before_commit
         ask_before_commit = False
         return tasks
+
     ACTIONS['y'] = ACTIONS['yes'] = ACTIONS['no-prompt'] = disable_confirmation_prompt
 
     # Better to define sync here rather than relying on getting api from existing task
@@ -1212,6 +1219,7 @@ def action_cli(argv=None, verbose=0):
         parse_task_dates(tasks)
         inject_project_info(tasks=tasks, projects=api.projects.all())
         return tasks
+
     ACTIONS['sync'] = sync
 
     def commit(tasks, *, raise_on_error=True, verbose=0):
@@ -1234,16 +1242,17 @@ def action_cli(argv=None, verbose=0):
         parse_task_dates(tasks)
         inject_project_info(tasks=tasks, projects=api.projects.all())
         return tasks
+
     ACTIONS['commit'] = commit
 
     # Better to define sync here rather than relying on getting api from existing task
     def show_queue(tasks, *, verbose=0):
         """ Show list of API commands in the POST queue. """
         # Remove custom fields (in preparation for JSON serialization during `_write_cache()`:
-        from pprint import pprint
         print("\n\nAPI QUEUE:\n----------\n")
         pprint(api.queue)
         return tasks
+
     ACTIONS['show-queue'] = show_queue
     ACTIONS['print-queue'] = show_queue
 
@@ -1257,6 +1266,7 @@ def action_cli(argv=None, verbose=0):
         else:
             print("delete_cache: API does not have any cache specified, so cannot delete cache.")
         return tasks
+
     ACTIONS['delete-cache'] = delete_cache
 
     def print_help(tasks, cmd=None, *, verbose=0):
@@ -1300,6 +1310,7 @@ argument to convert input values to e.g. integers.
             else:
                 print(ACTIONS[cmd].__doc__)
         return tasks
+
     ACTIONS['h'] = ACTIONS['help'] = ACTIONS['-help'] = print_help
 
     unrecognized_actions = [agroup[0] for agroup in action_groups if agroup[0] not in ACTIONS]
