@@ -162,7 +162,7 @@ def get_task_value(task, taskkey, default=None, coerce_type=None):
         # Support for v7.1 Sync API with separate 'due' dict attribute:
         # Although this may depend on how `parse_task_dates()` deals with v7.1 tasks.
         due_dict = task.get('due') or {}
-        task_value = due_dict.get()
+        task_value = due_dict.get(taskkey)
     else:
         task_value = task.get(taskkey, default)
     if coerce_type is not None and task_value is not None and type(task_value) != coerce_type:
@@ -336,7 +336,8 @@ def filter_tasks(
 
     if verbose > -1:
         print(f"\n - Filtering {len(tasks)} tasks with: {taskkey!r} {op_name} {value!r} "
-              f"(missing={missing!r}, default={default!r}, value_transform={value_transform!r}, negate={negate!r}).", file=sys.stderr)
+              f"(missing={missing!r}, default={default!r}, value_transform={value_transform!r}, negate={negate!r}).",
+              file=sys.stderr)
 
     if value_transform:
         if isinstance(value_transform, str):
@@ -686,9 +687,16 @@ def reschedule_tasks(tasks, new_date, timezone='date_string', update_local=False
 
     Args:
         tasks: List of tasks.
-        new_date:
-        timezone:
-        update_local:
+        new_date: The new due_date string to send.
+        timezone: The timezone to use.
+            Special case `timezone='date_string' (default) means that instead of
+            updating the due_date_utc, just send `date_string` to the Todoist server.
+        update_local: Update the local tasks 'due_date_utc' attribute, and then pass the tasks through
+            parse_task_dates(), which will update all other date-related attributes.
+        check_recurring: If True, will check whether the task list contains recurring tasks,
+            and print a warning if it does. Rescheduling a recurring task may be problematic,
+            as it will cause it to not be recurring anymore.
+        verbose: Adjust the verbosity to increase or decrease the amount of information printed during function run.
 
     Returns:
         List of tasks.
@@ -768,7 +776,7 @@ def reschedule_tasks(tasks, new_date, timezone='date_string', update_local=False
 
 
 def update_tasks(tasks, *, verbose=0):
-    """ Generic task updater.
+    """ Generic task updater. (NOT FUNCTIONAL)
 
     Todoist task updating caveats:
 
@@ -779,6 +787,8 @@ def update_tasks(tasks, *, verbose=0):
         That is just insane.
 
     """
+    if verbose > -1:
+        print("update_tasks() IS NOT FUNCTIONAL (a no-op).")
     return tasks
 
 
@@ -801,11 +811,14 @@ def mark_tasks_completed(tasks, method='close', *, verbose=0):
         tasks:  List of tasks.
         method: The method used to close the task.
             There are several meanings of marking a task as completed, especially for recurring tasks.
+        verbose: Increase or decrease the verbosity of the information printed during function run.
 
     Returns:
         tasks:  List of tasks (after closing them).
 
     """
+    if verbose > 0:
+        print(f"\nMarking tasks as complete using method {method!r}...")
     for task in tasks:
         if method == 'close':
             task.close()
@@ -820,7 +833,8 @@ def fetch_completed_tasks(tasks, *, verbose=0):
     You should probably use the old CLI instead:
         $ todoist print-completed-today --print-fmt "* {title}"
     """
-    print(f"Discarting the current {len(tasks)} tasks, and fetching completed tasks instead...")
+    if verbose > -1:
+        print(f"Discarting the current {len(tasks)} tasks, and fetching completed tasks instead...")
     from actionista.todoist.adhoc_cli import completed_get_all
     # This will use a different `api` object instance to fetch completed tasks:
     tasks, projects = completed_get_all()
@@ -951,14 +965,18 @@ def action_cli(argv=None, verbose=0):
     -Note: -sync is currently implied as the first action.-  (Edit: No, using cache for while testing.)
 
     Available actions include:
+        -sync:          Sync changes with the server. NOTE that sync will reset all previous task filters!
         -filter         filter the task list.
+        -due            shorthand for filtering by due date.
         -sort           sort the task list.
         -print          print the task list.
         -reschedule     reschedule all tasks in the current task list, usually after filter-selecting.
         -mark-completed mark all tasks in the tasks list as completed.
-        -sync:          Sync changes with the server. NOTE that sync will reset all previous task filters!
         -commit:        Commit local changes. Will ask for confirmation if `-y` has not been given beforehand.
         -y, -yes:       Skip all confirmation prompts.
+
+    For a full list of commands, refer to the `action_cli.ACTIONS` module attribute.
+    (Is also printed when invoking `todoist-action-cli --help`).
 
     You can chain as many operations as you need, but you cannot fork the pipeline.
     There is also no support for "OR" operators (or JOIN, or similar complexities).
@@ -966,8 +984,26 @@ def action_cli(argv=None, verbose=0):
     To get help on each action, use:
         `$ todoist-action-cli -help <action>`
 
-    Filter:
-    -------
+
+    Task attributes/keys:
+    ---------------------
+
+    The following task attributes can be used when filtering, sorting, and printing tasks:
+
+    * content - the task name/title/text.
+    * project_name
+    * priority_str - a string indicating prioritiy, e.g. p1-p4.
+    * checked_str - String indicating if task is completed "[x]" or not "[ ]".
+    * due_date_utc_iso - due date, UTC time, in ISO8601 formatted string.
+    * due_date_local_iso - due date, local time zone, in ISO8601 formatted string.
+    * due_date_safe_dt - "safe", i.e. not None, datetime object.
+    * date_string - due date, text string, as written by user (before being parsed by the computer).
+        This is actually the primary way in which task due dates are defined,
+        and can be used to specify e.g. recurring tasks, 'every monday at 13:00'.
+
+
+    Filtering tasks: `-filter`
+    --------------------------
 
     Filtering is always done as: <task field> <binary operator> <value>,
     e.g. "project_name eq Experiments".
@@ -1030,9 +1066,57 @@ def action_cli(argv=None, verbose=0):
             For instance, "in 2 weeks" works, but none of the following variations do:
             "in two weeks", "2 weeks from now", "two weeks", "in 2 weeks from now", etc.
 
+    ## Task filter, shorthand commands:
 
-    Print:
-    ------
+    Since the "full" `-filter` command is a little verbose,
+    the todoist-action-cli offers a range of "shorthand" convenience actions for filtering tasks.
+    These include:
+
+        -content        Shorthand for filtering by task content.
+        -name           Alias for `-content`.
+        -contains       Filter tasks that contains the given string.
+        -startswith     Filter tasks that starts with the given string.
+        -endswith       Filter tasks that ends with the given string.
+        -glob, -iglob   Filter tasks that match a given glob pattern (case sensitive / insensitive).
+        -eq, -ieq       Filter tasks that matches a given string (case sensitive / insensitive).
+        -has            Unofficial alias for `-filter`.
+
+    Some filtering mechanics require a little bit of extra care. This is implemented through the `-is` operator:
+    Examples:
+
+        `-is recurring`         - Only include tasks that are recurring.
+        `-is checked`           - Only include tasks that have been marked as complete ("checked off").
+        `-is due`               - Only include tasks that are not completed and have a due date.
+        `-is due before today`  - Only include overdue tasks (excluding completed tasks).
+        `-is due before [day/date]`
+
+    Again, we have a few shorthand convenience commands for using the `-is` command:
+
+        -is             Special filter for filtering by e.g. due date or whether an action is completed or recurring.
+        -not            Shorthand for `-is not`.
+                        Example: `-not recurring` to filter out recurring tasks.
+        -due            Shorthand for `-is due [when]`.
+
+
+    Sorting tasks: `-sort`
+    ----------------------
+
+    Sorting the list of tasks is useful for display purposes.
+    The command takes the form:
+
+        -sort <comma,separated,list,of,attributes> <sort-order>
+
+    Examples:
+
+        `-sort project_name,priority_str,item_order` - sort tasks by project, then priority, then manual order.
+        `-sort "project_name,priority" descending`  to sort tasks by project, then by priority, in descending order.
+        `-sort "project_name,content" ascending     to sort tasks by project, then by task content/name.
+
+    Default sort order is currently "project_name,priority_str,item_order", in ascending order.
+
+
+    Printing tasks: `-print`
+    ------------------------
 
     Printing takes three optional positional arguments:
         1. print_fmt: How to print each task. Every task field can be used as variable placeholder, e.g. {due_date_utc}.
@@ -1046,6 +1130,10 @@ def action_cli(argv=None, verbose=0):
             windows:
                 (a) Start cmd with: `cmd.exe /F:OFF` (disables tab-completion).
                 (b)
+
+    Default print format: (as specified by module attribute `DEFAULT_TASK_PRINT_FMT`)
+
+    {project_name:15} {due_date_safe_dt:%Y-%m-%d %H:%M} {priority_str} {checked_str} {content} (due: {date_string!r})
 
 
     Other commands:
@@ -1078,15 +1166,15 @@ def action_cli(argv=None, verbose=0):
     # To get actual list of items, use `api.state['items']`.
     # api._update_state creates object instances from the data as defined in `resp_models_mapping`,
     # so we should have `todoist.model.Item` object instances (not just the dicts received from the server):
-    task_itemss = api.state['items']
+    task_items = api.state['items']
 
     # Inject project info, so we can access e.g. task['project_name']:
     if verbose >= 1:
         print("Injecting project info...", file=sys.stderr)
-    inject_project_info(tasks=task_itemss, projects=api.projects.all())
+    inject_project_info(tasks=task_items, projects=api.projects.all())
     if verbose >= 2:
         print("Parsing dates and creating ISO strings...", file=sys.stderr)
-    parse_task_dates(task_itemss, strict=False)
+    parse_task_dates(task_items, strict=False)
 
     def increment_verbosity(tasks, *kwargs):
         """ Increase program informational output verbosity. """
@@ -1134,7 +1222,8 @@ def action_cli(argv=None, verbose=0):
             if answer[0].lower() == 'n':
                 print(" - OK, ABORTING commit.")
                 return tasks
-        print(f"\nCommitting {len(api.queue)} local changes and fetching updates...")
+        if verbose > -1:
+            print(f"\nCommitting {len(api.queue)} local changes and fetching updates...")
         # Remove custom fields before commit (and re-add them again afterwards)
         for task in api.state['items']:
             for k in CUSTOM_FIELDS:
@@ -1224,12 +1313,12 @@ argument to convert input values to e.g. integers.
 
     # For each action in the action chain, invoke the action providing the (remaining) tasks as first argument.
     for action_key, action_args, action_kwargs in action_groups:
-        n_tasks = len(task_itemss)
+        n_tasks = len(task_items)
         if verbose >= 1:
             print(f"\nInvoking '{action_key}' action on {n_tasks} tasks with args: {action_args!r}", file=sys.stderr)
         action_func = ACTIONS[action_key]
-        task_itemss = action_func(task_itemss, *action_args, verbose=verbose, **action_kwargs)
-        assert task_itemss is not None
+        task_items = action_func(task_items, *action_args, verbose=verbose, **action_kwargs)
+        assert task_items is not None
 
 
 if __name__ == '__main__':

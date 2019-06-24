@@ -1,4 +1,13 @@
-pyyaml
-pytz
-python-dateutil
+chardet
+dateparser
+future
+idna
 parsedatetime
+python-dateutil
+pytz
+pyyaml
+regex
+requests
+six
+tzlocal
+urllib3
