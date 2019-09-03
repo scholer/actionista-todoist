@@ -22,8 +22,7 @@ try:
     with open(os.path.join(PROJECT_ROOT_DIR, 'README.rst'), encoding='utf-8') as f:
         long_description = f.read()
 except IOError:
-    long_description = None
-"""
+    long_description = """
 Actionista Action-Chain CLI for Todoist (actionista-todoist). 
 
 A `find`-inspired CLI for Todoist.
@@ -39,7 +38,7 @@ See `README.rst` for usage.
 #   twine upload dist/*
 setup(
     name='actionista-todoist',
-    version='0.5.3dev1',
+    version='2019.09.03',
     packages=find_packages(),  # List all packages (directories) to include in the source dist.
     url='https://github.com/scholer/actionista-todoist',
     license='GNU General Public License v3 (GPLv3)',
@@ -61,14 +60,14 @@ setup(
     },
     # pip will install these modules as requirements.
     install_requires=[
-        'todoist-python',  # official Todoist python API from Doist
-        'pyyaml',
-        'pytz',
-        'python-dateutil',
-        'dateparser',  # Required for human_date_to_iso()
-        'parsedatetime',  # Has better concept of accuracy of the parsed date/time than dateparser.
+        'todoist-python',   # official Todoist python API from Doist
+        'pyyaml',           # Config loading.
+        'pytz',             # Timezone support.
+        'python-dateutil',  # Parsing ISO timestamps.
+        'dateparser',       # Required for human_date_to_iso()
+        'parsedatetime',    # Has better concept of accuracy of the parsed date/time than dateparser.
     ],
-    python_requires='>=3.5',
+    python_requires='>=3.5',  # Type-hints.
     classifiers=[
         # How mature is this project? Common values are
         #   3 - Alpha

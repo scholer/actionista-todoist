@@ -1,8 +1,11 @@
 import datetime
 import re
 import dateutil.parser
+import pytz
 from dateutil import tz
 from todoist.models import Item
+from copy import deepcopy
+from pprint import pprint
 
 """
 
@@ -23,6 +26,7 @@ except that Todoist has year before time of day, while ctime has year at the end
 # https://docs.python.org/3/library/datetime.html#strftime-strptime-behavior
 # Note: To get localized date formats, use the "Babel" package, c.f. https://stackoverflow.com/a/32785195/3241277
 TODOIST_DATE_FMT = "Ridiculous"  # e.g. "Fri 23 Mar 2018 15:01:05 +0000"
+ISO_DATE_FMT = "%Y-%m-%dT%H:%M:%S"
 LABEL_REGEX = r"@\w+"
 EXTRA_PROPS_REGEX = r"(?P<prop_group>\{(?P<props>(\w+:\s?[^,]+,?\s?)*)\})"
 PROP_KV_REGEX = r"((?P<key>\w+):\s?(?P<val>[^,]+),?\s?)"
@@ -31,10 +35,26 @@ TASK_REGEX = r"^(?P<title>.*?)" + EXTRA_PROPS_REGEX + "*\s*$"
 # extra_props_regex = r"(?P<prop_group>\{(?P<props>\w+:\s?[^,]+)*\})"
 # prop_kv_regex = r"(?P<key>\w+):\s?(?P<val>[^,]+)"
 # TASK_REGEX = r"^(?P<title>.*?)\s*(?P<reward_group>\{(R|r)eward:\s?(?P<reward>.+)\})?\s*$"
+endofday = datetime.time(23, 59, 59)
+localtz = tz.tzlocal()
 
 
 def use_task_data_dict(func):
     pass
+
+
+def is_recurring(task, data_attr='_custom_data'):
+    """ Return whether task is recurring or not.
+    This is super easy for new v8 Sync API tasks, but not so much for the older tasks.
+    """
+    if isinstance(task, Item):
+        # Try the "_custom_data" (it should include original data as well), fall back to Item.data:
+        task = getattr(task, data_attr, task.data)
+    try:
+        return task['due']['is_recurring']
+    except KeyError:
+        due_string = task.get('date_string') or task.get('due_string') or ''
+        return 'every' in due_string
 
 
 def extract_labels(content):
@@ -56,120 +76,245 @@ def extract_props(content):
 
 
 CUSTOM_FIELDS = {
-    'due_date',
-    'due_date_dt',
-    'due_date_utc_iso',
-    'due_date_local_dt',
-    'due_date_local_iso',
-    'due_date_safe_dt',
-    'due_date_safe_iso',
-    'date_added_dt',
-    'date_added_utc_iso',
-    'date_added_local_dt',
-    'date_added_local_iso',
+    # Update: There was too many date fields, so now all timestamps and datetime objects are just in local time.
+    'due_date',  # Due date (str), as listed by the API.
+    'due_date_string',  # Human-readable due date, as listed by the API.
+    'due_date_dt',  # datetime object (local time)
+    'due_date_iso',  # ISO str timestamp (local time)
+    'due_date_safe_dt',  # Safe due date datetime - is always present (dummy value for no due date)
+    'due_date_safe_iso',  # Safe due date ISO str - is always present (dummy value for no due date)
+    # 'due_date_utc_iso',  # TODO: I'm still using this for `-due before today` filter command, so maybe not remove this one?
+    # 'due_date_local_dt',
+    # 'due_date_local_iso',
+    'date_added_dt',   # datetime object (local time)
+    'date_added_iso',   # ISO str timestamp (local time)
     'date_added_safe_dt',
     'date_added_safe_iso',
+    # 'date_added_utc_iso',
+    # 'date_added_local_dt',
+    # 'date_added_local_iso',
     'completed_date_dt',
-    'completed_date_utc_iso',
-    'completed_date_local_dt',
-    'completed_date_local_iso',
+    'completed_date_iso',
     'completed_date_safe_dt',
     'completed_date_safe_iso',
+    # 'completed_date_utc_iso',
+    # 'completed_date_local_dt',
+    # 'completed_date_local_iso',
     'checked_str',
 }
 
 
-def parse_task_dates(tasks, date_keys=("due_date", "date_added", "completed_date"), strict=False):
-    """ Parse date strings and create python datetime objects. """
-    endofday = datetime.time(23, 59, 59)
-    localtz = tz.tzlocal()
-    for task in tasks:
-        # 'due_date' has been permanently renamed to 'due_date_utc'. (Which is ridiculous, btw).
-        if isinstance(task, Item):
-            task = task.data
+def add_task_date_fields(
+        input_dict, output_dict=None,
+        date_keys=("date_added", "completed_date"),
+        allday_time=endofday,
+        datestrfmt="%Y-%m-%d %H:%M",
+        allday_datestrfmt="%Y-%m-%d",
+        safe_date=datetime.datetime(2099, 12, 31, 23, 59, 59).astimezone(localtz),
+):
+    """ Parse dates in `input_dict` and add custom date fields to `output_data`.
 
-        if 'due_date_utc' in task:  # May still be `None`!
-            task['due_date'] = task['due_date_utc']
-            # xx:xx:59 = due date with no time (v7.0)
-            task['is_allday'] = (task['due_date_utc'] or "59")[-2:] == "59"
-        elif task.get('due'):
-            # v7.1 Sync API has separate 'due' child dict - expand these to the old v7.0 format:
-            task['due_date_utc'] = task['due_date'] = task['due']['date']
-            task['date_string'] = task['due']['string']
-            task['is_recurring'] = task['due']['is_recurring']
-            task['is_allday'] = len(task['due']['date']) <= len("2018-12-31")
-            # Note: v7.1 due date is in ISO8601 format (unlike v7.0).
+    Args:
+        input_dict:
+        output_dict:
+        allday_time: If specified, "all-day" tasks (with a due date but no due time)
+            will have their "due_time_dt" datetime object set to this value.
+        safe_date: If a date is not specified (due date, date added, date completed),
+            use this as the "safe value", e.g. typically a date really far into the future.
+
+    Returns:
+        output_dict
+
+    Update, 2019: The new v8 Sync API builds on the combined `due` property that was introduced
+    with v7.1.
+
+    """
+    if output_dict is None:
+        output_dict = {}
+
+    # Parse due date:
+    if input_dict.get('due'):
+        # v8 (and v7.1) Sync API has separate 'due' child dict - expand these to the old v7.0 format:
+        output_dict['due_date'] = input_dict['due']['date']
+        output_dict['due_string'] = input_dict['due']['string']
+        output_dict['date_string'] = input_dict['due']['string']  # v7.0 legacy attribute name
+        output_dict['due_is_recurring'] = input_dict['due']['is_recurring']
+        output_dict['is_recurring'] = input_dict['due']['is_recurring']
+        # An all-day task in v8 API has a due date with no time specification:
+        output_dict['is_allday'] = len(input_dict['due']['date']) <= len("YYYY-MM-DD")
+        # Note: v8 due date is in RFC-3339/ISO8601 format!
+
+        # Parse strings to datetime objects (denoted with a "_dt" postfix):
+        # v8 API has two distinct ways of specifying due dates:
+        # 1. "Floating", where the time is always the literal clock time, in-dependent of timezone.
+        # 2. "Fixed timezone", where the time is in universal UTC time, and has a "timezone" property.
+        #    The timezone attribute is used when re-parsing the due-string,
+        # e.g. string="every day at 2pm", timezone="Europe/Copenhagen".
+        # OBS: The datetime objects are always represented in the local timezone.
+        output_dict['due_date_dt'] = dateutil.parser.parse(input_dict['due']['date'])
+        if output_dict['is_allday'] and allday_time:
+            # Force v7.0 behaviour for datetime objects:
+            output_dict['due_date_dt'] = output_dict['due_date_dt'].replace(
+                hour=allday_time.hour, minute=allday_time.minute, second=allday_time.second
+            )
+            output_dict['due_date_dt'] = output_dict['due_date_dt'].astimezone(tz.tzlocal())
+        if not output_dict['due_date_dt'].tzinfo:
+            if input_dict['due']['timezone']:  # Only check timezone if not all-day task:
+                # OBS: Timezone calculation not needed for v7.1 legacy tasks, where [due][date] was UTC timestamp:
+                # Convert from the given timezone to local timezone.
+                # First create a "due-date local" timezone object, then use it to make a timezone-aware
+                # datetime object using `localize()`, then convert that timezone-aware datetime to
+                # computer-local time using `astimezone(tz.tzlocal())`:
+                # print("Task '{content}': due: {due} => dt: {due_date_dt}".format(due_date_dt=output_dict['due_date_dt'], **input_dict))
+                # Make it aware of the timezone:
+                output_dict['due_date_dt'] = pytz.timezone(input_dict['due']['timezone']).localize(output_dict['due_date_dt'])
+            # Convert from UTC (or whatever timezone it has) to local datetime:
+            output_dict['due_date_dt'] = output_dict['due_date_dt'].astimezone(tz.tzlocal())
+            # output_dict['due_date_dt'] = pytz.utc.localize()
+    elif input_dict.get('due_date_utc'):
+        # I have some old tasks where "due_date_utc" attribute is present but set to None. (weird)
+        # print("Task '{content}': parsing due_date_utc: {due_date_utc}   (string: {date_string})".format(**input_dict))
+        # Old v7 Sync API
+        output_dict['due_date'] = input_dict['due_date_utc']
+        output_dict['due_string'] = input_dict['date_string']
+        # xx:xx:59 = due date with no time (v7.0)
+        output_dict['is_allday'] = (input_dict['due_date_utc'] or "59")[-2:] == "59"
+        output_dict['due_date_dt'] = dateutil.parser.parse(input_dict['due_date_utc']).astimezone(localtz)
+    else:
+        # No due date specified:
+        output_dict['is_allday'] = True
+
+    # All datetime objects should have a timezone (either that, or none should have timezone)
+    # Mixing timezone-aware with timezone-naive makes comparison impossible (TypeError)
+    # At this point, all `due_date_dt` objects should have a timezone. If not, then something is wrong.
+    if output_dict.get('due_date_dt') and not output_dict['due_date_dt'].tzinfo:
+        print("Adding tzinfo to task (it should already have it at this point!):")
+        pprint(input_dict)
+        output_dict['due_date_dt'] = output_dict['due_date_dt'].astimezone(tz.tzlocal())
+
+    # Add some "guaranteed", safe fields which are always present:
+    output_dict['due_date_safe_dt'] = output_dict.get('due_date_dt', safe_date)
+    output_dict['due_date_safe_iso'] = "{:%Y-%m-%dT%H:%M:%S}".format(output_dict.get('due_date_dt', safe_date))
+
+    # Parse additional date attributes to datetime objects (with local timezone):
+    for key in date_keys:
+        datestr = input_dict.get(key)
+        # Old v7 date format was e.g. "Fri 23 Mar 2018 15:01:05 +0000" - ridiculous.
+        # New v8 format is strictly RFC-3339/ISO1806 - nice.
+        if datestr:
+            # Create datetime object - datestr should be guaranteed to be UTC:
+            dt_local = dateutil.parser.parse(datestr).astimezone(localtz)
+            output_dict['%s_dt' % key] = dt_local
+            output_dict['%s_iso' % key] = "{:%Y-%m-%dT%H:%M:%S}".format(dt_local)
         else:
-            task['is_allday'] = True
+            dt_local = safe_date.astimezone(localtz)
 
-        # print("Parsing dates in Task:")
-        # print(task)
-        for key in date_keys:
-            # changed: `due_date` is now `due_date_utc`
-            # `completed_date` is typically NOT going to be present unless task has been completed.
-            datestr = task[key] if strict else task.get(key)  # E.g. ""Fri 23 Mar 2018 15:01:05 +0000" - ridiculous.
-            if datestr:
-                # Date time object instance:
-                dtobj = task['%s_dt' % key] = dateutil.parser.parse(datestr)
-                dt_local = task['%s_local_dt' % key] = dtobj.astimezone(localtz)
-                if task['is_allday']:
-                    # Force v7.0 behaviour for datetime objects:
-                    dt_local.replace(hour=23, minute=59, second=59)
-                # CUSTOM_FIELDS.add('%s_dt' % key)
-                assert '%s_dt' % key in CUSTOM_FIELDS
-                # Note: These dates are usually in UTC time; you will need to convert to local timezone
-                task['%s_utc_iso' % key] = "{:%Y-%m-%dT%H:%M:%S}".format(dtobj)
-                # CUSTOM_FIELDS.add('%s_utc_iso' % key)
-                assert '%s_utc_iso' % key in CUSTOM_FIELDS
-                # The time strings below is what you normally see in the app and what you probably want to display:
-                # CUSTOM_FIELDS.add('%s_local_dt' % key)
-                assert '%s_local_dt' % key in CUSTOM_FIELDS
-                task['%s_local_iso' % key] = "{:%Y-%m-%dT%H:%M:%S}".format(dt_local)
-                # CUSTOM_FIELDS.add('%s_local_iso' % key)
-                assert '%s_local_iso' % key in CUSTOM_FIELDS
-                # task['due_time_local'] = task['due_date_local_dt'].time()
-                # Local time (without date):
-                # due_time_local = dt_local.time()
-                # task['%s_local_time' % key] = "{:%H:%M}".format(due_time_local)  # May be "23:59:59" if no time is set
-                # In Todoist, if task has due date without specified time, the time is set to "23:59:59".
-                # due_time_opt: Optional time, None if due time is "end of day" (indicating no due time only due day).
-                # task['%s_time_opt' % key] = time_opt = due_time_local if due_time_local != endofday else None
-                # task['%s_time_opt_HHMM' % key] = "{:%H:%M}".format(time_opt) if time_opt else ""
+        # It is nice to have some "guaranteed", safe fields which are always present:
+        output_dict['%s_safe_dt' % key] = dt_local
+        output_dict['%s_safe_iso' % key] = "{:%Y-%m-%dT%H:%M:%S}".format(dt_local)
+
+    # Also make "checked_str" field to quickly indicate the checked/completed status of a task:
+    output_dict["checked_str"] = "[x]" if input_dict.get("checked", 0) else "[ ]"
+    # Also make priority string, "p1", "p2". This is kind of weird, because p1 (high priority) is 4 not 1.
+    # (The "priority strings" are used e.g. in the web app, where you type "p1" to make a high-priority task.)
+    output_dict["priority_str"] = "p%s" % (5 - input_dict.get("priority", 1))
+    return output_dict
+
+
+def inject_tasks_custom_data(
+        tasks, output_attr="_custom_data", deepcopy_data=True,
+        add_dates=True,
+        parse_content=False, task_regex=TASK_REGEX,
+        add_project_info=True, projects=None
+):
+    """ Parse task data (e.g. dates) and inject custom data fields.
+
+    This an "all-in-one" function that performs all parsing/extraction steps.
+    (Not sure this is better that just doing them sequentially.)
+
+    By default, the custom data is added to a separate `task._custom_data` property,
+    which will be a deep copy of `task.data`.
+
+    Args:
+        tasks:
+        output_attr: The task attribute to inject data to.
+        deepcopy_data:
+        add_dates:
+        parse_content:
+        task_regex:
+        add_project_info:
+        projects:
+
+    Returns:
+
+    """
+    for task in tasks:
+        # Get the input_data and output_data objects to read from and write to:
+        if isinstance(task, Item):
+            input_data = task.data
+            if output_attr:
+                try:
+                    output_data = getattr(task, output_attr)
+                except AttributeError:
+                    output_data = {}
+                    setattr(task, output_attr, output_data)
+                if deepcopy_data:
+                    output_data.update(deepcopy(task.data))
             else:
-                # Just create datetime object for "guaranteed" / "safe" fields:
-                # Note: The v7.1 Sync API just specifies due date with no time as '2018-04-15', i.e. without time info.
-                # Unfortunately, datetime objects have no way to specify "all day" or "no time spec".
-                # See comments in this thread by pvkooten (author of metadate): https://goo.gl/3ZNdW3
-                dtobj = datetime.datetime(2099, 12, 31, 23, 59, 59)
-                dt_local = dtobj.astimezone(localtz)
+                output_data = task.data
+        else:
+            assert isinstance(task, dict)
+            input_data = output_data = task
 
-            # It is nice to have some "guaranteed", safe fields which are always present:
-            task['%s_safe_dt' % key] = dt_local
-            task['%s_safe_iso' % key] = "{:%Y-%m-%dT%H:%M:%S}".format(dt_local)
-            # CUSTOM_FIELDS.add('%s_safe_dt' % key)
-            # CUSTOM_FIELDS.add('%s_safe_iso' % key)
-            assert '%s_safe_dt' % key in CUSTOM_FIELDS
-            assert '%s_safe_iso' % key in CUSTOM_FIELDS
+        if add_dates:
+            # Custom date fields (and "checked_str" and "priority_str"):
+            custom_fields = add_task_date_fields(input_dict=input_data)
+            output_data.update(output_data)
 
-            assert not any('%s' in k for k in task)  # Make sure we've replaced all '%s'
+        if parse_content:
+            parse_task_content(task, output_data, task_regex)
 
-        # Also make "checked_str"
-        task["checked_str"] = "[x]" if task.get("checked", 0) else "[ ]"
-        # Also make priority string, "p1", "p2". This is kind of weird, because p1 (high priority) is 4 not 1.
-        task["priority_str"] = "p%s" % (5 - task.get("priority", 1))
-
-    # CUSTOM_FIELDS.add('checked_str')
-    assert 'checked_str' in CUSTOM_FIELDS
+    # Adding project info requires having the projects data:
+    if add_project_info:
+        assert projects is not None
+        inject_tasks_project_fields(tasks=tasks, projects=projects)
 
 
-# def parse_date_string(date_str, iso_fmt=None):
-#     """Return (informal_date, iso_date_str, datetime_obj) tuple."""
-#     import dateutil.parser
-#     dt = dateutil.parser.parse(date_str)  # returns datetime object
-#     return dt
+def inject_tasks_date_fields(
+        tasks,
+        date_keys=("due_date", "date_added", "completed_date"),
+        strict=False,
+        output_attr='_custom_data', deepcopy_data=True):
+    """ Parse date strings and create python datetime objects.
 
 
-def inject_project_info(tasks, projects, strict=False, na='N/A'):
+    """
+    print(f"Parsing and adding additional date information to tasks {output_attr if output_attr else ''}...")
+    for task in tasks:
+        # Get the input_data and output_data objects to read from and write to:
+        if isinstance(task, Item):
+            input_data = task.data
+            if output_attr:
+                try:
+                    output_data = getattr(task, output_attr)
+                except AttributeError:
+                    output_data = {}
+                    setattr(task, output_attr, output_data)
+                if deepcopy_data:
+                    output_data.update(deepcopy(task.data))
+            else:
+                output_data = task.data
+        else:
+            assert isinstance(task, dict)
+            input_data = output_data = task
+
+        # Add custom date fields (and "checked_str" and "priority_str"):
+        added_fields = add_task_date_fields(input_dict=input_data, date_keys=date_keys)
+        # print(f"Task {input_data['content']} aded date fields:", added_fields)
+        output_data.update(added_fields)
+
+
+def inject_tasks_project_fields(tasks, projects, strict=False, na='N/A', output_attr='_custom_data'):
     """ Inject project information (name, etc) for each task, using the task's project_id.
     This makes it considerably more convenient to print tasks, when each task has the project name, etc.
     Information is injected as `task["project_%s" % k"] = v` for all key-value pairs in the task's project,
@@ -182,15 +327,28 @@ def inject_project_info(tasks, projects, strict=False, na='N/A'):
         na: If, in non-strict mode, a task's project_id is not found, use this value instead.
             It can be either a single value, which is used for the most common project fields,
             or it can be a dict where we just do `task.update(na)`.
+        output_attr: Instead of updating task directly, update the dict found
+            in `getattr(task, output_attr)`.
 
     Returns:
         None; the task dicts are updated in-place.
     """
+    print(f"Adding additional project information to tasks {output_attr if output_attr else ''}...")
     if not isinstance(projects, dict):
+        # If projects is e.g. a list of projects, create a dict mapping project_id to project:
         projects_by_pid = {project['id']: project for project in projects}
         projects = projects_by_pid
     # I think it should be OK to add non-standard fields to task Items
     for task in tasks:
+        # Update either `task.data` or `task._custom_data`:
+        if output_attr:
+            try:
+                output_data = getattr(task, output_attr, task)
+            except AttributeError:
+                output_data = {}
+                setattr(task, output_attr, output_data)
+        else:
+            output_data = task
         pid = task['project_id']
         # Todoist API sometimes returns string ids and sometimes integer ids.
         try:
@@ -200,16 +358,33 @@ def inject_project_info(tasks, projects, strict=False, na='N/A'):
                 raise exc
             else:
                 if isinstance(na, dict):
-                    task.update(na)
+                    output_data.update(na)
                 else:
-                    task['project_name'] = na
+                    output_data['project_name'] = na
         else:
-            # If projects are Model instances, then the data dict is in the 'data' attribute (otherwise just project):
+            # Add all the project info to task, using "project_" prefix.
+            # If project is a Model instance, then the data dict is in the 'data' attribute
+            # (otherwise just project is already a dict and can be used directly).
+            # (the todoist.model.Model class does not support the dict interface).
             for k, v in getattr(project, 'data', project).items():
-                task["project_%s" % k] = v
+                output_data["project_%s" % k] = v
 
 
-def parse_tasks_content(tasks, task_regex=None):
+def parse_task_content(task, output_dict, task_regex):
+    try:
+        output_dict.update(re.match(task_regex, task['content']).groupdict())
+        labels, cleaned = extract_labels(task['content'])
+        props, cleaned = extract_props(task['content'])
+        output_dict['cleaned'] = cleaned
+        output_dict['ext_labels'] = labels
+        output_dict['ext_props'] = props or {}
+    except AttributeError as e:
+        print("WARNING: Error while matching regex `{}` to task['content'] `{}`: %s".format(
+            task_regex, task['content'], repr(e)))
+    return output_dict
+
+
+def parse_tasks_content(tasks, task_regex=None, output_attr='_custom_data'):
     """ Parse tasks using the task-parsing regular expressions. Tasks are parsed and updated in-place.
     This is only for use with my custom metadata scheme where I use `{reward: 1h}` in the task content
     to define key-value metadata pairs.
@@ -225,19 +400,20 @@ def parse_tasks_content(tasks, task_regex=None):
     @Habit @Reward Check DFCI email {reward: 0.25h W}
 
     """
+    print(f"Adding additional content-parsed information to tasks {output_attr if output_attr else ''}...")
     if task_regex is None:
         task_regex = TASK_REGEX
     if isinstance(task_regex, str):
         task_regex = re.compile(task_regex)
     for task in tasks:
-        try:
-            task.update(re.match(task_regex, task['content']).groupdict())
-            labels, cleaned = extract_labels(task['content'])
-            props, cleaned = extract_props(task['content'])
-            task['cleaned'] = cleaned
-            task['ext_labels'] = labels
-            task['ext_props'] = props or {}
-        except AttributeError as e:
-            print("WARNING: Error while matching regex `{}` to task['content'] `{}`: %s".format(
-                task_regex, task['content'], repr(e)))
+        # Update either `task.data` or `task._custom_data`:
+        if output_attr:
+            try:
+                output_data = getattr(task, output_attr)
+            except AttributeError:
+                output_data = {}
+                setattr(task, output_attr, output_data)
+        else:
+            output_data = task
+        parse_task_content(task, output_data, task_regex)
     return tasks

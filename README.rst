@@ -3,11 +3,27 @@
 Actionista Action-Chain CLI for Todoist (actionista-todoist)
 ============================================================
 
+Actionista Action CLI for Todoist.
+
+Manage your Todoist tasks from the command line, using powerful filters to
+select, print, reschedule, and complete tasks in a batch-wise fashion.
+
+Do you have dozens or even hundreds of overdue tasks on your agenda?
+Clear up your task list in seconds, using the Actionista Action CLI for Todoist.
+You can now take the rest of the day off with a clear conscience.
+
+This Action CLI for Todoist (`todoist-action-cli`), operates sequentially on a list of tasks.
+You start out with a list of *all* tasks, and then select tasks using one of the many
+filters available. You can then sort, print, and reschedule the selected tasks.
+
 *Actionista* Action-Chain CLI for Todoist (actionista-todoist)
-is a ``find``-inspired "action chain" command line tool for managing your Todoist task list.
+is inspired by the powerful ``find`` command line tool. It takes the "chain of actions"
+approach that ``find`` uses to find and select files on your harddisk,
+and applies it for managing your Todoist task list.
 
 The successful ``find`` utility works by supplying a sequence of "actions"
 (also known as "expressions" in the ``find`` manual).
+
 Most actions are essentially filters, where you list criteria for the files to find.
 However, the real usability of ``find`` is that it can not only print the matching files,
 but also use the matching files for other actions, e.g. deleting the files,
@@ -255,8 +271,8 @@ Installing this project (``actionista-todoist``) with ``pip`` will also give you
 
 
 
-Note: Other python-based Todoist projects
-------------------------------------------
+Prior art: Other python-based Todoist projects
+-----------------------------------------------
 
 **Other Todoist CLI packages that I know about:**
 
@@ -268,18 +284,23 @@ Note: Other python-based Todoist projects
     Focuses on pre-defined queries for listing tasks, e.g. "today and overdue", "next 7 days", etc.
     Lots of other functionality, pretty extensive code base.
     Uses the official ``todoist-python`` package.
+
 * {pydoist}(https://pypi.org/project/Pydoist/) - A basic CLI to add Todoist tasks from the command line.
+
 
 **Other general python Todoist packages:**
 
 * python-todoist - The official python 'Todoist' package from Doist (the company behind Todoist).
-    Is currently using the version 7.0 "Sync" API.
+    Is currently using the version 8.0 "Sync" API.
+
 * [pytodoist](https://pypi.org/project/pytodoist/) - An alternative Todoist API package.
-    Also uses the v7 Sync API.
-    A rather different approach to API wrapping, perhaps more object oriented.
-    Focused on modelling individual Users/Projects/Tasks/Notes,
-    where the official todoist-python package has *managers* as the central unit
-    (ItemsManager, ProjectsManager, NotesManager).
+  Also uses the v7 Sync API.
+  A rather different approach to API wrapping, perhaps more object oriented.
+  Focused on modelling individual Users/Projects/Tasks/Notes,
+  where the official todoist-python package has *managers* as the central unit
+  (ItemsManager, ProjectsManager, NotesManager).
+
+  * Last update November 2016 - will be obsolete when the v7 Sync API is removed.
 
 
 

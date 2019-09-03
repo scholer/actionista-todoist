@@ -321,7 +321,7 @@ The format has also changed to ISO8601, and instead of using "23:59:59" as "all 
 it now just sets due.date to 'YYYY-MM-DD' with no time spec.
 When this is transformed to datetime objects, the time is defaulted to 0:00:00,
 which would make it difficult to filter and sort due dates.
-I've thus directed `parse_task_dates()` to keep the old behaviour,
+I've thus directed `inject_tasks_date_fields()` to keep the old behaviour,
 setting the datetime's local time to 23:59:59.
 
 I'm not sure how task updating work in the v7.1 Sync API.
@@ -365,7 +365,7 @@ import argparse
 
 from todoist.models import Project
 
-from actionista.todoist.tasks_utils import parse_task_dates, parse_tasks_content, inject_project_info
+from actionista.todoist.tasks_utils import inject_tasks_date_fields, parse_tasks_content, inject_tasks_project_fields
 from actionista.todoist.utils import get_todoist_api
 
 
@@ -473,7 +473,7 @@ def process_tasks(tasks, sort_key="default", filter=None, parse_task=True, task_
     """
 
     # Parse date strings and create datetime objects (*_dt):
-    parse_task_dates(tasks)
+    inject_tasks_date_fields(tasks)
 
     # Parse custom metadata from task content (using `TASK_REGEX` regular expression):
     if parse_task:
@@ -743,7 +743,7 @@ def print_todays_completed_items(
         `date_completed` field is always None for tasks returned by the Todoist v7.0 Sync API.
 
     If using (b), then there seem to be an issue with some tasks having the wrong project id.
-    This can, however, be mitigated by passing `strict=False` to `inject_project_info()`.
+    This can, however, be mitigated by passing `strict=False` to `inject_tasks_project_fields()`.
     The `completed/get_all` endpoint returns completed items (list) and their related projects (dict) as follows:
         {
           "items": [
@@ -794,8 +794,8 @@ def print_todays_completed_items(
         # Maybe they are just using old project_id values, but still.
         # Is the api.activity.get() endpoint at https://todoist.com/API/v7/activity/get any better?
         # Yes, it seems this gives correct project_id values for the returned tasks.
-        # Edit: I've added a non-strict option to inject_project_info, so we can still use completed/get_all data.
-        inject_project_info(tasks, projects, strict=False)
+        # Edit: I've added a non-strict option to inject_tasks_project_fields, so we can still use completed/get_all data.
+        inject_tasks_project_fields(tasks, projects, strict=False)
     print("\nToday's completed tasks:\n")
     tasks = print_tasks(tasks, print_fmt=print_fmt, sort_key=sort_key)
     return tasks

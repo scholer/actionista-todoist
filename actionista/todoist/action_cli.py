@@ -1,64 +1,28 @@
-# Copyright 2018 Rasmus Scholer Sorensen
-
-
+# Copyright 2018 Rasmus Scholer Sorensen <rasmusscholer@gmail.com>
 """
 
-This is my experimentation with creating a more powerful API.
+Actionista Action CLI for Todoist.
 
-I've previously created a basic `todoist` module, with basic examples on how to use the Todoist API,
-including notes and discussions.
+Manage your Todoist tasks from the command line, using powerful filters to
+select, print, reschedule, and complete tasks in a batch-wise fashion.
 
-This is my attempt at making a more extensive CLI.
+Do you have dozens or even hundreds of overdue tasks on your agenda?
+Clear up your task list in seconds, using the Actionista Action CLI for Todoist.
+You can now take the rest of the day off with a clear conscience.
 
-The goal is to have something where I can make a long list of actions, e.g.:
-
-    $ todoist -filter <filter_name> -print "\nBEFORE RESCHEDULING:" -reschedule "today" -print "\nAFTER RESCHEDULING:"
-
-Note how this has an order. It is more like `find` CLI than traditional ArgParser or Click CLI.
-I therefore don't think we can create it with argparse or click, but it should be easy to roll manually.
-
-
-Note: Python datetime libraries:
-* datetime stdlib
-* maya - By Kenneth Reitz
-* arrow (not to be confused with apache-arrow) - by Chris Smith.
-* moment - port of moment.js
-* 
+This Action CLI for Todoist (`todoist-action-cli`), operates sequentially on a list of tasks.
+You start out with a list of *all* tasks, and then select tasks using one of the many
+filters available. You can then sort, print, and reschedule the selected tasks.
 
 
-Complex Filtering:
-------------------
+The module uses the [official "Todoist Python API" package](https://pypi.org/project/todoist-python),
+[github](https://github.com/Doist/todoist-python).
 
-Regarding complex filtering operations with more than one expression,
-e.g. "-filter (due_date_utc gt 2017-12-24 and due_date_utc lt 2017-12-13) or priority eq 1".
 
-Why would we want to do this?
-* The "and" is equivalent to applying two sequential filters.
-* So it is only useful to implement "or",
-* which is just a join of two separate queries.
-* I really don't think it is worth the complexity to achieve this!
+# TODO: Move all action commands (`print_tasks`, etc) to dedicated module to make this module a bit more manageable.
 
-This probably requires a proper parser, e.g:
-* recursive descent parser. ("The hard way")
-* s-expression (sexp) parser in Python
-* pyparsing
-* PLY
-* YACC / Bison / ANTLR
-
-Which makes for rather complicated code:
-* https://gist.github.com/adamnew123456/0f45c75c805aa371fa92 - Pratt-style parser, 700+ LOCs for a simple calculator.
-* https://github.com/louisfisch/Mathematical-Expressions-Parser/
-
-Although maybe this can be done easily with a parser generator based on parsing expression grammars (PEGs):
-* https://github.com/orlandohill/waxeye
-* https://github.com/scottfrazer/hermes
-
-See also:
-* Dragon Book
-* Boost Spirit (C++)
-* https://en.wikipedia.org/wiki/Operator-precedence_parser
-* https://en.wikipedia.org/wiki/S-expression
-*
+# TODO: Adopt the `update_date_complete`, and `close` action terminologies,
+# c.f. https://developer.todoist.com/sync/v8/#close-item
 
 
 
@@ -77,7 +41,8 @@ import shutil
 from pprint import pprint
 
 from actionista import binary_operators
-from actionista.todoist.tasks_utils import parse_task_dates, inject_project_info, CUSTOM_FIELDS
+from .tasks_utils import inject_tasks_date_fields, inject_tasks_project_fields, CUSTOM_FIELDS
+from .tasks_utils import is_recurring
 from actionista.date_utils import local_time_to_utc, end_of_day, start_of_day
 from actionista.date_utils import ISO_8601_FMT, DATE_DAY_FMT
 from actionista.todoist.utils import get_config, get_token
@@ -89,7 +54,7 @@ DEFAULT_TASK_PRINT_FMT = (
     "{priority_str} "
     "{checked_str} "
     "{content} "
-    "(due: {date_string!r})"
+    "(due: {due_string!r})"
 )
 # print_fmt="{project_name:15} {due_date_safe_dt:%Y-%m-%d %H:%M  } {content}",
 # print_fmt="{project_name:15} {due_date_safe_dt:%Y-%m-%d %H:%M}  {checked_str} {content}",
@@ -156,32 +121,58 @@ def parse_action_args(action_groups):
     pass
 
 
-def get_task_value(task, taskkey, default=None, coerce_type=None):
-    task = task.data if isinstance(task, Item) else task
-    # return taskkey not in task or op(itemgetter(task), value)
-    if 'due' in task and taskkey in ('due_date', 'due_date_utc'):
-        # Support for v7.1 Sync API with separate 'due' dict attribute:
-        # Although this may depend on how `parse_task_dates()` deals with v7.1 tasks.
-        due_dict = task.get('due') or {}
-        task_value = due_dict.get(taskkey)
-    else:
-        task_value = task.get(taskkey, default)
+def get_task_value(task, taskkey, default=None, coerce_type=None, data_attr="_custom_data"):
+    """ Get a task data value from the task.
+    This function combines a couple of features:
+
+    1. Determine if task is a dict or Item, and extract the data dict using the given data attribute.
+    2. Get the data value given by taskkey, defaulting to the given default value
+        if `key` is not present in the data dict.
+    3. coerce the value to a given type, e.g. coerce "1" to integer 1, or a date-string to datetime object.
+
+    Args:
+        task:
+        taskkey:
+        default:
+        coerce_type:
+        data_attr:
+
+    Returns:
+
+    """
+    if isinstance(task, Item):
+        # Try the "_custom_data" first (it should include original data as well), fall back to Item.data:
+        task = getattr(task, data_attr, task.data)
+    try:
+        task_value = task[taskkey]
+    except KeyError:
+        if taskkey.startswith("due_"):
+            try:
+                task_value = task['due'][taskkey.strip("due_")]
+            except KeyError:
+                task_value = default
+        elif taskkey.startswith("due."):
+            # support dot-notation, task["due.date"] -> task["due"]["date"]
+            task_value = task.get('due', {}).get(taskkey.rsplit('.', 1)[1], default)
+        else:
+            task_value = default
     if coerce_type is not None and task_value is not None and type(task_value) != coerce_type:
         print("NOTICE: `type(task_value) != coerce_type` - Coercing `task_value` to %s:" % type(coerce_type))
         task_value = coerce_type(task_value)
     return task_value
 
 
-def get_recurring_tasks(tasks, negate=False):
-    return [task for task in tasks
-            if str(get_task_value(task, 'date_string')).lower().startswith('every') is not negate]
+def get_recurring_tasks(tasks: list, negate: bool = False) -> list:
+    return [task for task in tasks if is_recurring(task) != negate]
 
 
 def print_tasks(
-        tasks,
-        print_fmt=DEFAULT_TASK_PRINT_FMT,
-        header=None,  sep="\n",
-        *, verbose=0
+        tasks: list,
+        print_fmt: str = DEFAULT_TASK_PRINT_FMT,
+        header=None, sep: str = "\n",
+        *,
+        data_attr: str = "_custom_data",
+        verbose: int = 0
 ):
     """ Print tasks, using a python format string.
 
@@ -197,6 +188,10 @@ def print_tasks(
         header: Print a header before printing the tasks.
         sep: How to separate each printed task. Default is just "\n".
         # Keyword only arguments:
+        data_attr: The task attribute to get task data from.
+            Original data from the Todoist Sync API is stored in Item.data,
+            but I prefer to add derived data fields in a separate Item._custom_data,
+            so that they don't get persisted when writing the cache to disk.
         verbose: The verbosity to print informational messages with during the filtering process.
 
     Returns: List of tasks.
@@ -214,7 +209,7 @@ def print_tasks(
         "Project:        Due_date:        Done: Task:"
         "Project:        Due_date:        P:   Done: Task:"
 
-    See `parse_task_dates()` for available date fields. In brief:
+    See `inject_tasks_date_fields()` for available date fields. In brief:
         due_date_utc
         due_date_utc_iso
         due_date_dt
@@ -230,7 +225,8 @@ def print_tasks(
               f"separated by {sep!r}, using print_fmt:\n{print_fmt!r}.\n" if verbose else "...\n", file=sys.stderr)
     if header:
         print(header)
-    task_dicts = [task.data if isinstance(task, Item) else task for task in tasks]
+    # Use `task._custom_data`, which is a copy of task.data with extra stuff added (if available).
+    task_dicts = [getattr(task, data_attr, task.data) if isinstance(task, Item) else task for task in tasks]
     if print_fmt == 'repr' or print_fmt == 'pprint':
         import pprint
         pprint.pprint(task_dicts)
@@ -239,14 +235,16 @@ def print_tasks(
     return tasks
 
 
-def sort_tasks(tasks, keys="project_name,priority_str,item_order", order="ascending", *, verbose=0):
+def sort_tasks(tasks, keys="project_name,priority_str,content", order="ascending",
+               *, data_attr="_custom_data", verbose=0):
     """ Sort the list of tasks, by task attribute in ascending or descending order.
 
     Args:
-        tasks:
-        keys:
-        order:
+        tasks: The tasks to sort (dicts or todoist.moddl.Item objects).
+        keys: The keys to sort by. Should be a list or comma-separated string.
+        order: The sort order, either ascending or descending.
         # Keyword only arguments:
+        data_attr: Ues this attribute for task data. For instance, if the
         verbose: The verbosity to print informational messages with during the filtering process.
 
     Examples:
@@ -263,11 +261,16 @@ def sort_tasks(tasks, keys="project_name,priority_str,item_order", order="ascend
 
     """
     if verbose > -1:
-        print(f" - Sorting {len(tasks)} tasks by {keys!r} ({order}).", file=sys.stderr)
+        print(f"\n - Sorting {len(tasks)} tasks by {keys!r} ({order}).", file=sys.stderr)
     if isinstance(keys, str):
         keys = keys.split(',')
     itemgetter = operator.itemgetter(*keys)
-    tasks = sorted(tasks, key=itemgetter, reverse=(order == "descending"))
+    if data_attr:
+        def keyfunc(task):
+            return itemgetter(getattr(task, data_attr, task.data))
+    else:
+        keyfunc = itemgetter
+    tasks = sorted(tasks, key=keyfunc, reverse=(order == "descending"))
     return tasks
 
 
@@ -276,6 +279,7 @@ def filter_tasks(
         taskkey, op_name, value,
         missing="exclude", default=None,
         value_transform=None, negate=False,
+        data_attr="_custom_data",
         *, verbose=0):
     """ Generic task filtering method based on comparison with a specific task attribute.
 
@@ -292,12 +296,15 @@ def filter_tasks(
         missing: How to deal with tasks with missing attributes, e.g. "include", "exclude", or default to a given value.
         default: Use this value if a task attribute is missing and missing="default".
         value_transform: Perform a given transformation of the input value, e.g. `int`, or `str`.
+            value_transform can be the name of any function/class in the current namespace.
         negate: Can be used to negate (invert) the filter.
             Some operators already have an inverse operator, e.g. `eq` vs `ne`, `le` vs `gt`.
             But other operators do not have a simple inverse operator, e.g. `startswith`.
             So, if you want to remove/exclude tasks starting with 'Email', use:
                 -filter content startswith Email exclude _ _ True
             Note: Negate applies to the transform, but not to tasks included/excluded due to missing value.
+        data_attr: Instead of using task or task.data, use `getatr(task, data_attr)`.
+            This is useful if you are setting custom task data on `task._custom_data` to keep them separate.
         verbose: The verbosity to print informational messages with during the filtering process.
 
     Returns:
@@ -361,34 +368,22 @@ def filter_tasks(
                     # Was a one-off eval transform intended as: `value = eval('value*2')`.
                     value = t
                     value_transform = None  # Prevent further transformation
+
+    # value_transform can be used to transform the filter/comparison value to e.g. an int or datetime object:
     if value_transform:
         # custom callable:
         value = value_transform(value)
         if default and missing == "default":  # Only try to transform task default value if we actually need it
             default = value_transform(default)
-    # Perhaps transform value?
-    # For certain types and ops we may want to customize the binary operator to account for special cases.
-    # For instance, if taskkey is a date type, then we generally want to convert both
-    # Although, maybe just as compare them as strings, e.g. `'2018-02-01' > '2018-01-31'` ?
-    # Only case then is the "None" case, in which case just use '2099-12-31T23:59' ?
-    # * Edit: Better to have a generic `missing` parameter.
-    # Still, we may want to use one of the advanced date/time libraries, so we can interpret
-    # stuff like "today", "tomorrow", "5 days from now", etc.
-    # print("OP:", op)
-    # if taskkey in ('due_date', 'due_date_utc'):
-    #     # Tasks without due date may have None; we use a distant due date instead to simplify date comparisons:
-    #     def itemgetter(task):
-    #         return task[taskkey] or '2099-12-31T23:59'  # No due date (None) defaults to end of the century.
-    # else:
-    #     itemgetter = operator.itemgetter(taskkey)
 
+    # TODO: Remove this! Instead, use `get_task_value()` - and `value_transform(value)` to tranform comparison value.
     def get_value(task, default_=None):
         nonlocal value
-        task = task.data if isinstance(task, Item) else task
+        task = getattr(task, data_attr) if isinstance(task, Item) else task
         # return taskkey not in task or op(itemgetter(task), value)
         if 'due' in task and taskkey in ('due_date', 'due_date_utc'):
             # Support for v7.1 Sync API with separate 'due' dict attribute:
-            # Although this may depend on how `parse_task_dates()` deals with v7.1 tasks.
+            # Although this may depend on how `inject_tasks_date_fields()` deals with v7.1 tasks.
             due_dict = task.get('due') or {}
             task_value = due_dict.get(taskkey.replace('due_', ''))  # items in the 'due' dict don't have 'due_' prefix
         else:
@@ -423,7 +418,9 @@ def filter_tasks(
             print('\nWARNING: filter_tasks() called with missing="default" but no default value given (is None).\n')
     else:
         raise ValueError("`missing` value %r not recognized." % (missing,))
+
     tasks = [task for task in tasks if filter_eval(task)]
+
     return tasks
 
 
@@ -485,7 +482,7 @@ def special_is_filter(tasks, *args, **kwargs):
         if args[0:2] == ["due", "or", "overdue"] or args[0:2] == ["overdue", "or", "due"]:
             args[0:2] = ["due", "before", "tomorrow"]
         timefmt = ISO_8601_FMT
-        taskkey = 'due_date_utc_iso'
+        taskkey = 'due_date_utc_iso'  # Switch to 'due_date_iso' (or 'due_date_dt')
         convert = None
         if args[0] == 'overdue':
             op_name = 'lt'
@@ -534,7 +531,11 @@ def special_is_filter(tasks, *args, **kwargs):
         # When we request tasks that are due, we don't want completed tasks, so remove these first:
         tasks = filter_tasks(tasks, taskkey="checked", op_name="eq", value=0, missing="include", **kwargs)
         # Then return tasks that are due as requested:
-        return filter_tasks(tasks, taskkey=taskkey, op_name=op_name, value=utc_str, negate=negate, **kwargs)
+        # return filter_tasks(tasks, taskkey=taskkey, op_name=op_name, value=utc_str, negate=negate, **kwargs)
+        # Update, 2019-Sep: Use local datetime object for comparison:
+        # OBS: can't compare offset-naive and offset-aware datetimes - so make sure `dt` has tzinfo:
+        dt = dt.astimezone(tz.tzlocal())
+        return filter_tasks(tasks, taskkey='due_date_dt', op_name=op_name, value=dt, negate=negate, **kwargs)
     elif args[0] in ('checked', 'unchecked', 'complete', 'incomplete', 'completed', 'done'):
         # -is not checked
         if args[0][:2] in ('in', 'un'):
@@ -553,7 +554,7 @@ def special_is_filter(tasks, *args, **kwargs):
         """ `-is [not] recurring` filter.
         NOTE: The 'is_recurring' attribute is not officially exposed and "may be removed soon",
         c.f. https://github.com/Doist/todoist-api/issues/33.
-        Until then, perhaps it is better to filter based on whether the date_string starts with the word "every". 
+        Until then, perhaps it is better to filter based on whether the due_string starts with the word "every". 
         """
         # taskkey = "is_recurring"
         # op_name = "eq"
@@ -561,8 +562,7 @@ def special_is_filter(tasks, *args, **kwargs):
         # return filter_tasks(tasks, taskkey=taskkey, op_name=op_name, value=value, negate=negate)
         # -is not recurring : for recurring task : negate==True, startswith('every')==True => startswith == negate
         print(f"\n - Filtering {len(tasks)} tasks, excluding {'' if negate else 'non-'}recurring tasks...")
-        return [task for task in tasks
-                if str(get_task_value(task, 'date_string')).lower().startswith('every') is not negate]
+        return get_recurring_tasks(tasks, negate=negate)
     else:
         raise ValueError("`-is` parameter %r not recognized. (args = %r)" % (args[0], args))
 
@@ -698,7 +698,7 @@ def reschedule_tasks(
             Special case `timezone='date_string' (default) means that instead of
             updating the due_date_utc, just send `date_string` to the Todoist server.
         update_local: Update the local tasks 'due_date_utc' attribute, and then pass the tasks through
-            parse_task_dates(), which will update all other date-related attributes.
+            inject_tasks_date_fields(), which will update all other date-related attributes.
         check_recurring: If True, will check whether the task list contains recurring tasks,
             and print a warning if it does. Rescheduling a recurring task may be problematic,
             as it will cause it to not be recurring anymore.
@@ -740,7 +740,7 @@ def reschedule_tasks(
         # Note: For non-repeating tasks, this is certainly by far the simplest way to update due dates.
         for task in tasks:
             if 'due' in task.data:
-                # Support v7.1 Sync API with dedicated 'due' dict attribute.
+                # Support v8 Sync API with dedicated 'due' dict attribute.
                 new_due = {'string': new_date}
                 task.update(due=new_due)
             else:
@@ -777,7 +777,7 @@ def reschedule_tasks(
         if update_local:
             task['due_date_utc'] = new_date_utc
     if update_local:
-        parse_task_dates(tasks)
+        inject_tasks_date_fields(tasks)
     return tasks
 
 
@@ -844,7 +844,7 @@ def fetch_completed_tasks(tasks, *, verbose=0):
     from actionista.todoist.adhoc_cli import completed_get_all
     # This will use a different `api` object instance to fetch completed tasks:
     tasks, projects = completed_get_all()
-    inject_project_info(tasks, projects)
+    inject_tasks_project_fields(tasks, projects)
     return tasks
 
 
@@ -1157,7 +1157,7 @@ def action_cli(argv=None, verbose=0):
     token = get_token(raise_if_missing=True, config=config)
     api = todoist.TodoistAPI(token=token)
     if config.get('api_url'):
-        # Default: 'https://todoist.com/API/v7/' (including the last '/')
+        # Current default: 'https://api.todoist.com/sync/v8/' (including the last '/')
         assert config.get('api_url').endswith('/')
         print("NOTICE: USING NON-STANDARD API BASE URL:", config.get('api_url'))
         api.api_endpoint = None  # Make sure this is not used.
@@ -1174,13 +1174,15 @@ def action_cli(argv=None, verbose=0):
     # so we should have `todoist.model.Item` object instances (not just the dicts received from the server):
     task_items = api.state['items']
 
+    # Inject custom date fields, e.g. `due_date_iso`, `due_date_dt`, and `checked_str`:
+    if verbose >= 2:
+        print("Parsing dates and creating ISO strings...", file=sys.stderr)
+    inject_tasks_date_fields(task_items, strict=False)
+
     # Inject project info, so we can access e.g. task['project_name']:
     if verbose >= 1:
         print("Injecting project info...", file=sys.stderr)
-    inject_project_info(tasks=task_items, projects=api.projects.all())
-    if verbose >= 2:
-        print("Parsing dates and creating ISO strings...", file=sys.stderr)
-    parse_task_dates(task_items, strict=False)
+    inject_tasks_project_fields(tasks=task_items, projects=api.projects.all())
 
     def increment_verbosity(tasks, *kwargs):
         """ Increase program informational output verbosity. """
@@ -1216,8 +1218,8 @@ def action_cli(argv=None, verbose=0):
         tasks = api.state['items']
         n_after = len(tasks)
         print(f" - {n_after} tasks after sync ({n_before} tasks in the task list before sync).")
-        parse_task_dates(tasks)
-        inject_project_info(tasks=tasks, projects=api.projects.all())
+        inject_tasks_date_fields(tasks)
+        inject_tasks_project_fields(tasks=tasks, projects=api.projects.all())
         return tasks
 
     ACTIONS['sync'] = sync
@@ -1239,8 +1241,8 @@ def action_cli(argv=None, verbose=0):
         # Commit changes (includes an automatic sync), and re-parse task items:
         api.commit(raise_on_error=raise_on_error)
         tasks = api.state['items']
-        parse_task_dates(tasks)
-        inject_project_info(tasks=tasks, projects=api.projects.all())
+        inject_tasks_project_fields(tasks=tasks, projects=api.projects.all())
+        inject_tasks_date_fields(tasks)
         return tasks
 
     ACTIONS['commit'] = commit

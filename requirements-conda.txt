@@ -1,3 +1,4 @@
+# python-todoist only requires "requests"; the rest is for this app and this app's dependencies.
 chardet
 dateparser
 future
