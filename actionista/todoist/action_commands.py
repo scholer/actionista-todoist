@@ -253,7 +253,7 @@ def filter_tasks(
     # TODO: Remove this! Instead, use `get_task_value()` - and `value_transform(value)` to tranform comparison value.
     def get_value(task, default_=None):
         nonlocal value
-        task = getattr(task, data_attr) if isinstance(task, Item) else task
+        task = getattr(task, data_attr, task.data) if isinstance(task, Item) else task
         # return taskkey not in task or op(itemgetter(task), value)
         if 'due' in task and taskkey in ('due_date', 'due_date_utc'):
             # Support for v7.1 Sync API with separate 'due' dict attribute:
@@ -801,7 +801,7 @@ def complete_and_update_date_for_recurring_tasks(tasks, new_date=None, due_strin
     if verbose > 0:
         print(f"\nCompleting recurring tasks and moving the due date to {new_date if new_date else 'next occurrence'} "
               f"(using API method 'item_update_date_complete') ...")
-        print(" --> Remember to `-commit` the changes to the server! <--")
+        print("\n --> Remember to `-commit` the changes to the server! <--", file=sys.stderr)
     print("NOTICE: todoist.models.Item.update_date_complete() is currently broken in "
           "todoist-python package version 8.0.0.")
     for task in tasks:
@@ -824,7 +824,7 @@ def uncomplete_tasks(tasks, *, verbose=0):
     """
     if verbose > 0:
         print(f"\nRe-opening tasks (using API method 'item_uncomplete') ...")
-        print(" --> Remember to `-commit` the changes to the server! <--")
+        print("\n --> Remember to `-commit` the changes to the server! <--", file=sys.stderr)
     for task in tasks:
         task.uncomplete()
     return tasks
@@ -845,7 +845,7 @@ def archive_tasks(tasks, *, verbose=0):
     """
     if verbose > 0:
         print(f"\nArchiving tasks (using API method 'item_archive') ...")
-        print(" --> Remember to `-commit` the changes to the server! <--")
+        print("\n --> Remember to `-commit` the changes to the server! <--", file=sys.stderr)
     for task in tasks:
         task.archive()
     return tasks
@@ -866,9 +866,80 @@ def delete_tasks(tasks, *, verbose=0):
     """
     if verbose > 0:
         print(f"\nArchiving tasks (using API method 'item_delete') ...")
-        print(" --> Remember to `-commit` the changes to the server! <--")
+        print("\n --> Remember to `-commit` the changes to the server! <--", file=sys.stderr)
     for task in tasks:
         task.delete()
+    return tasks
+
+
+def add_task(tasks, api, task_content, *, project=None, due=None, priority=None, labels=None,
+             auto_reminder=True, auto_parse_labels=True, verbose=0):
+    """ Add a new task API method 'item_add'.
+
+    See: https://developer.todoist.com/sync/v8/?shell#add-an-item
+
+    Args:
+        tasks:  List of tasks.
+        api: tooist.api.TodoistAPI object (so we can get projects, labels, etc.)
+        verbose: Increase or decrease the verbosity of the information printed during function run.
+
+    Returns:
+        tasks:  List of tasks (after deleting them).
+
+    """
+    if verbose > 0:
+        print(f"\nAdding new task (using API method 'item_add') ...")
+        print("\n --> Remember to `-commit` the changes to the server! <--", file=sys.stderr)
+
+    params = {'auto_reminder': auto_reminder, 'auto_parse_labels': auto_parse_labels}
+
+    if due:
+        params['due'] = {"string": due}
+
+    if project:
+        if isinstance(project, str):
+            # Assume project-name:
+            # We need to find project_id from project_name:
+            # If projects is e.g. a list of projects, create a dict mapping project_id to project:
+            project_name = project
+            # projects_by_name = {p['name']: p for p in api.projects.all()}
+            # project_id = projects_by_name[project]['id']
+            project_id = next(iter(p['id'] for p in api.projects.all() if p['name'] == project_name))
+        else:
+            # Project should be a project_id:
+            assert isinstance(project, int)
+            project_id = project
+        params['project_id'] = project_id
+
+    if labels:
+        if isinstance(labels, str):
+            labels = [label.strip() for label in labels.split(",")]
+        if any(isinstance(label, str) for label in labels):
+            # Assume label-name: We need to find label_id from label_name:
+            labels_by_name = {label['name']: label for label in api.labels.all()}
+            labels = [label if isinstance(label, int) else labels_by_name[label]['id'] for label in labels]
+        params['labels'] = labels
+
+    if priority:
+        if isinstance(priority, str):
+            # Priority in the form of "p1" to "p4".
+            priority_str = priority
+            priority_str_map = dict(p1=4, p2=3, p3=2, p4=1)
+            try:
+                priority = priority_str_map[priority]
+            except KeyError:
+                raise ValueError("Argument `priority` must be one of 'p1', 'p2', 'p3', or 'p4' (if str).")
+        else:
+            # Integer between 1 and 4:
+            if not isinstance(priority, int):
+                raise TypeError("Argument `priority` must be str or int.")
+            if priority < 1 or 4 < priority:
+                raise ValueError("Argument `priority` must be between 1 and 4 (if int).")
+        params['priority'] = priority
+
+    new_task = api.items.add(task_content, **params)
+    # tasks.append(new_task)  # This should not be needed, because api.items.add() updates the `tasks` list.
+
     return tasks
 
 
@@ -942,4 +1013,10 @@ ACTIONS = {
     'sync': None,  # Pulls updates from the server, but does not push changes to the server.
     'commit': None,  # Push changes to the server.
     'show-queue': None,  # Show the command queue, that will be pushed to the server on `commit`.
+}
+
+# These are actions that requires the full `api` object to work,
+# e.g. because they need to convert a project-name to project-id.
+API_ACTIONS = {
+    "add-task": add_task,
 }

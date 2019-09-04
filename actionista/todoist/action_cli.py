@@ -35,6 +35,7 @@ import shutil
 from pprint import pprint
 
 from actionista import binary_operators
+from actionista.todoist import action_commands
 from actionista.todoist.action_commands import ACTIONS
 from .tasks_utils import inject_tasks_date_fields, inject_tasks_project_fields, CUSTOM_FIELDS
 from actionista.todoist.utils import get_config, get_token
@@ -49,9 +50,27 @@ def parse_argv(argv=None):
         argv: List of command line arguments, defaulting to `sys.argv`.
 
     Returns:
-        action_groups: List of (action_name, action_args) pairs.
+        (base_args, base_kwargs), action_groups
+    where
+        `(base_args and base_kwargs)` are args and kwargs given *before* the first `-command`,
+    and
+        `action_groups` is a list of `(action_name, action_args, action_kwargs)` tuples.
+
 
     Examples:
+
+        >>> cmd = '-filter due_date_utc contains 2017-12-31 -add-task "Task 123" project=MyProject due=tomorrow priority=p1'
+        >>> parse_argv(shlex.split(cmd))
+        (
+            [], {},
+            [
+                ('filter', ('due_date_utc', 'contains', '2017-12-31'), {}),
+                ('add-task', ('Task123',), {'project': 'MyProject', 'due': 'tomorrow', 'priority': 'p1'}),
+            ]
+        )
+
+
+    Old examples:
 
         # Print tasks due on New Year's Eve 2017 for the project named "Project1":
         >>> cmd = '-filter due_date_utc contains 2017-12-31 -filter project_name eq Project1 -print "{content}"'
@@ -375,15 +394,17 @@ def action_cli(argv=None, verbose=0):
     # so we should have `todoist.model.Item` object instances (not just the dicts received from the server):
     task_items = api.state['items']
 
-    # Inject custom date fields, e.g. `due_date_iso`, `due_date_dt`, and `checked_str`:
-    if verbose >= 2:
-        print("Parsing dates and creating ISO strings...", file=sys.stderr)
-    inject_tasks_date_fields(task_items, strict=False)
+    if int(base_kwargs.get('inject_task_date_fields', 1)):
+        # Inject custom date fields, e.g. `due_date_iso`, `due_date_dt`, and `checked_str`:
+        if verbose >= 2:
+            print("Parsing dates and creating ISO strings...", file=sys.stderr)
+        inject_tasks_date_fields(task_items, strict=False)
 
-    # Inject project info, so we can access e.g. task['project_name']:
-    if verbose >= 1:
-        print("Injecting project info...", file=sys.stderr)
-    inject_tasks_project_fields(tasks=task_items, projects=api.projects.all())
+    if int(base_kwargs.get('inject_task_project_fields', 1)):
+        # Inject project info, so we can access e.g. task['project_name']:
+        if verbose >= 1:
+            print("Injecting project info...", file=sys.stderr)
+        inject_tasks_project_fields(tasks=task_items, projects=api.projects.all())
 
     def increment_verbosity(tasks, **kwargs):
         """ Increase program informational output verbosity. """
@@ -449,11 +470,27 @@ def action_cli(argv=None, verbose=0):
     ACTIONS['commit'] = commit
 
     # Better to define sync here rather than relying on getting api from existing task
-    def show_queue(tasks, *, verbose=0):
+    def show_queue(tasks, *, fmt="json", width=200, indent=2, verbose=0):
         """ Show list of API commands in the POST queue. """
+        def get_obj_data(obj):
+            return obj.data
         # Remove custom fields (in preparation for JSON serialization during `_write_cache()`:
         print("\n\nAPI QUEUE:\n----------\n")
-        pprint(api.queue)
+
+        if fmt == "pprint":
+            pprint(api.queue, width=width, indent=indent)
+        elif fmt == "yaml":
+            import yaml
+            print(yaml.safe_dump(api.queue, width=width, indent=indent))
+        elif fmt == "yaml-unsafe":
+            import yaml
+            print(yaml.dump(api.queue, width=width, indent=indent))
+        elif fmt == "json":
+            import json
+            # This is actually the best, since it can use `default=get_obj_data` to represent model objects.
+            print(json.dumps(api.queue, indent=indent, default=get_obj_data))
+        else:
+            raise ValueError(f"Argument `fmt` value {fmt} not recognized. Should be one of 'pprint', 'yaml', or 'json'.")
         return tasks
 
     ACTIONS['show-queue'] = show_queue
@@ -515,6 +552,23 @@ argument to convert input values to e.g. integers.
         return tasks
 
     ACTIONS['h'] = ACTIONS['help'] = ACTIONS['-help'] = print_help
+
+    def add_task(tasks, task_content, *, project=None, due=None, priority=None, labels=None,
+                 auto_reminder=True, auto_parse_labels=True, verbose=0):
+        """ Forward arguments to action_commands.add_task, injecting the `api` object. """
+        print("add_task function invoked with args:")
+        pprint(dict(
+            tasks=f"[{len(tasks)} tasks]", task_content=task_content, project=project,
+            due=due, priority=priority, labels=labels,
+            auto_reminder=auto_reminder, auto_parse_labels=auto_parse_labels,
+        ))
+        return action_commands.add_task(
+            tasks=tasks, api=api, task_content=task_content,
+            project=project, due=due, priority=priority, labels=labels,
+            auto_reminder=True, auto_parse_labels=auto_parse_labels, verbose=verbose
+        )
+
+    ACTIONS['add-task'] = ACTIONS['-add-task'] = add_task
 
     unrecognized_actions = [agroup[0] for agroup in action_groups if agroup[0] not in ACTIONS]
     if unrecognized_actions:

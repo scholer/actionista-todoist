@@ -122,3 +122,44 @@ After invoking the command above, you should see that the task due day has chang
 
 You can generally specify dates and times the same way you would in Todoist,
 e.g. using "2 days from now", "Wednesday 3 pm", "next monday", "2019-12-31 15:00", etc.
+
+
+### Adding new tasks:
+
+To add a new task, use the `-add-task` action:
+
+
+You can add labels like you normally would using `@label`:
+
+	$ todoist-action-cli -sync -add-task "Test task 005 @devtest #Dev-personal <date tomorrow> p2" -commit
+
+However, as you can see, using "#project" and the normal ways of specifying due date and priority doesn't work.
+
+You can provide information on `project`, `due` date, `priority`, and `labels` explicitly using `=`:
+
+	$ todoist-action-cli -sync -add-task "Test task 006" project=Work due=tomorrow priority=p1 labels=awaiting,devtest -commit \
+	  -filter content startswith "Test" -print "{content}"
+
+
+### Showing changes before they are submitted:
+
+If you are curious about what changes will be submitted to the server, you can see them before you `-commit`,
+using `-show-queue` action:
+
+	$ todoist-action-cli -sync -name "Task123" -print -reschedule "tomorrow" -show-queue -commit
+
+	$ todoist-action-cli -sync -add-task "Test task 006" project=Work due=tomorrow priority=p1 labels=awaiting,devtest -show-queue fmt=json -commit
+
+
+### Resetting cached data:
+
+You may encounter a state that does not allow you to continue using `todoist-action-cli` or the todoist-python package.
+If that happens, you can run the following command to delete the cache, thereby resetting the local state:
+
+	$ todoist-action-cli inject_task_date_fields=0 inject_task_project_fields=0 -delete-cache
+
+*OBS: If this happens, it may be due to a bug in this program.
+If so, please consider submitting an issue at https://github.com/scholer/actionista-todoist/issues.
+If you are technically proficiency and you have managed to fix a bug in this program,
+I welcome you to submit a pull-request at https://github.com/scholer/actionista-todoist/pulls.*
+
