@@ -15,3 +15,110 @@ You can now take the rest of the day off with a clear conscience.
 This Action CLI for Todoist (`todoist-action-cli`), operates sequentially on a list of tasks.
 You start out with a list of *all* tasks, and then select tasks using one of the many
 filters available. You can then sort, print, and reschedule the selected tasks.
+
+
+Examples:
+---------
+
+> OBS: In all examples, a code line starting with `$ ` means that it should be run from
+> the terminal / command prompt.
+
+### Basic actions:
+
+The basic actions are:
+
+* `-sync` - make sure you have the latest updates from the Todoist server.
+* `-print` - used to print tasks out (in the terminal).
+* `-commit` - used to submit any changes that you've made.
+
+Almost all examples starts with a `-sync` action,
+followed by one or more task selection (filtering) actions,
+followed by a `-sort` action to sort the selected tasks,
+then a `-print` action to print the selected tasks out.
+
+If you want to make changes, e.g. close or reschedule the selected tasks,
+you just add the desired action command (e.g. `-close` or `-reschedule "tomorrow"),
+followed by `-commit` to submit your changes to the server.
+
+*Please make sure to remember the `-commit` action, if you want your changes to have any effect!*
+
+
+
+
+### Selecting tasks:
+
+You typically use the following actions for selecting (filtering) tasks:
+
+* `-name "task-content"` - select tasks by the task name ("content").
+* `-project "project-name"` - select tasks in a given project.
+* `-due [before/after "date"]` - select tasks by due date.
+* `-is [not] recurring` - select recurring or non-recurring tasks.
+
+You can use "glob patterns" when selecting tasks by task name or project.
+For instance, `-project "Dev*"` will select tasks for all projects that begin with "Dev".
+
+For more info on "glob pattern matching", see e.g. [this](https://facelessuser.github.io/wcmatch/glob/)
+or [wikipedia](https://en.wikipedia.org/wiki/Glob_(programming)).
+
+Additional convenience actions to filter/select tasks by task name:
+
+* `-contains "text"` - the same as `-name "*text*"`.
+* `-startswith "text"` - the same as `-name "text*"`.
+* `-endswith "text"` - the same as `-name "*text"`.
+
+
+#### Task selection examples:
+
+Print all tasks in your "Work" project.
+
+	$ todoist-action-cli -sync -project "Work" -sort -print
+
+To select tasks in both "Work", as well as "Work-dev" and "Work-admin",
+just add an asterix after "Work". This will use "glob-style" pattern matching:
+
+	$ todoist-action-cli -sync -project "Work*" -sort -print
+
+
+### Sorting tasks:
+
+Sort overdue tasks by due date:
+
+	$ todoist-action-cli -due before today -sort "due_date_safe_dt" -print
+
+Sort overdue tasks by priority, then due date, then project:
+
+	$ todoist-action-cli -due before today -sort "priority_str,due_date_safe_dt,project_name" -print
+
+* Note: We sort by "priority_str" (p1, p2, ...), since we are sorting in "ascending" mode by default,
+  and priority_str gets the highest-priority tasks at the top.
+  We could sort by "priority", but for "priority", higher values means "higher priority",
+  while for "priority_str", a "p1" priority is higher than "p3".
+
+
+### Closing/completing tasks:
+
+Close (complete) a task starting with "Write" from project "Personal" (and also print the task):
+
+	$ todoist-action-cli -sync -project "Personal" -startswith "Write" -print -close -commit
+
+After invoking the command above, you should now see the task as being "checked off" when you print it:
+
+	$ todoist-action-cli -sync -project "Personal" -startswith "Write" -sort -print
+
+You can re-open the task again, if you need to:
+
+	$ todoist-action-cli -sync -project "Personal" -startswith "Write" -print -reopen -commit
+
+
+### Rescheduling tasks:
+
+Reschedule task "Task123" (and also print the task):
+
+	$ todoist-action-cli -sync -name "Task123" -print -reschedule "tomorrow" -commit
+
+After invoking the command above, you should see that the task due day has changed when you print it:
+
+	$ todoist-action-cli -sync -name "Task123" -print
+
+You can generally specify dates and times the same way you would in Todoist,
+e.g. using "2 days from now", "Wednesday 3 pm", "next monday", "2019-12-31 15:00", etc.

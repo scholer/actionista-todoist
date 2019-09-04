@@ -4,6 +4,9 @@
 Module dealing specifically with dates and times.
 
 """
+import datetime
+
+import parsedatetime
 from dateutil import tz
 import dateparser
 # import datetime
@@ -96,3 +99,22 @@ def human_date_to_iso(human_date, fmt=ISO_8601_FMT):
         print(f"\nERROR: FAILED to parse human input date {human_date!r}.\n")
         raise ValueError(f"FAILED to parse human input date {human_date!r}.")
     return dt.strftime(fmt)
+
+
+def get_rfc3339_datestr(datestr: str):
+    try:
+        datetime.datetime.fromisoformat(datestr)  # as of Python 3.7
+    except ValueError:
+        # If datetime.datetime.fromisoformat() is unable to parse the date_str,
+        # then it is probably not an iso string and we should re-parse it.
+        # Note that dateutil.parser.parse("monday") works just fine.
+        cal = parsedatetime.Calendar()
+        time_struct, context = cal.parse(datestr, version=2)
+        dt = datetime.datetime(*time_struct[:6])
+        if context.hasTime:
+            date_rfc3339 = dt.isoformat()
+        else:
+            date_rfc3339 = f"{dt:%Y-%m-%d}"
+    else:
+        date_rfc3339 = datestr
+    return date_rfc3339

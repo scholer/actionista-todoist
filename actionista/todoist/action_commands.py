@@ -17,14 +17,17 @@ from dateutil import tz
 from todoist.models import Item
 
 from actionista import binary_operators
-from actionista.date_utils import ISO_8601_FMT, start_of_day, DATE_DAY_FMT, end_of_day, local_time_to_utc
-from actionista.todoist.tasks_utils import get_task_value, get_recurring_tasks
+from actionista.date_utils import ISO_8601_FMT, start_of_day, DATE_DAY_FMT, end_of_day
+from actionista.date_utils import local_time_to_utc, get_rfc3339_datestr
+from actionista.todoist.tasks_utils import get_task_value, get_recurring_tasks, is_recurring
 from actionista.todoist.tasks_utils import inject_tasks_date_fields, inject_tasks_project_fields
 
 
 DEFAULT_TASK_PRINT_FMT = (
-    "{project_name:15} "
-    "{due_date_safe_dt:%Y-%m-%d %H:%M}  "
+    "{project_name:17} "
+    # "{due_date_safe_dt:%Y-%m-%d %H:%M}  "
+    # "{due_date_safe:^14}  "
+    "{due_date_pretty_safe:18} "
     "{priority_str} "
     "{checked_str} "
     "{content} "
@@ -565,117 +568,117 @@ def p4_filter(tasks, *args, **kwargs):
     return priority_str_eq_filter(tasks, value="p4", *args, **kwargs)
 
 
-def reschedule_tasks(
-        tasks, new_date, timezone='date_string', update_local=False, check_recurring=True, *,
-        verbose=0
-):
+def reschedule_tasks(tasks, new_date, *, verbose=0):
     """ Reschedule tasks to a new date/time.
-
-    Example: Reschedule overdue tasks for tomorrow
-        $ todoist-action-cli -sync -due before today -reschedule tomorrow
-    Will reschedule overdue tasks using:
-        reschedule_tasks(tasks, 'tomorrow')
 
     Args:
         tasks: List of tasks.
         new_date: The new due_date string to send.
-        timezone: The timezone to use.
-            Special case `timezone='date_string' (default) means that instead of
-            updating the due_date_utc, just send `date_string` to the Todoist server.
-        update_local: Update the local tasks 'due_date_utc' attribute, and then pass the tasks through
-            inject_tasks_date_fields(), which will update all other date-related attributes.
-        check_recurring: If True, will check whether the task list contains recurring tasks,
-            and print a warning if it does. Rescheduling a recurring task may be problematic,
-            as it will cause it to not be recurring anymore.
-        verbose: Adjust the verbosity to increase or decrease the amount of information printed during function run.
+        verbose: Adjust the verbosity to increase or decrease the amount of information
+            printed during function run.
 
     Returns:
         List of tasks.
 
-    WOOOOOT:
-    When SENDING an updated `due_date_utc`, it must be in ISO8601 format!
-    From https://developer.todoist.com/sync/v7/?shell#update-an-item :
-    > The date of the task in the format YYYY-MM-DDTHH:MM (for example: 2012-3-24T23:59).
-    > The value of due_date_utc must be in UTC. Note that, when the due_date_utc argument is specified,
-    > the date_string is required and has to specified as well, and also, the date_string argument will be
-    > parsed as local timestamp, and converted to UTC internally, according to the user’s profile settings.
+    This command treats recurring and non-recurring tasks differently:
 
-    Maybe take a look at what happens in the web-app when you reschedule a task?
-    Hmm, the webapp uses the v7.1 Sync API at /API/v7.1/sync.
-    The v7.1 API uses task items with a "due" dict with keys "date", "timezone", "is_recurring", "string", and "lang".
-    This seems to make 'due_date_utc' obsolete. Seems like a good decision, but it makes some of my work obsolete.
+        * Regular, non-recurring tasks are rescheduled by updating due.string = new_date.
+        * Recurring tasks are rescheduled by updating due.date = rfc3339(new_date),
+            but keeping due.string as-is, so that the recurrence schedule won't change.
 
-    Perhaps it is easier to just only pass `date_string`, especially for non-recurring tasks.
+    If you would like to force one specific behavior, regardless of whether the task
+    is recurring or not, please use one of the following functions:
 
-    Regarding v7.1 Sync API:
-        * The web client doesn't send "next sunday" date strings any more. The client is in charge of parsing
-            the date and sending a valid date. The due.string was set to "15 Apr".
+        reschedule_tasks_due_date()  - this will always update due.date.
+        reschedule_tasks_by_due_string() - this will always update due.string.
 
-    # TODO: This should be updated for v8 Sync API:
-    # TODO: * Perhaps make two separate commands, `-reschedule-recurring` and `-reschedule-nonrecurring`.
-    # TODO: * These functions can deal with the situations where you would like to force a specific behavior,
-    # TODO:   e.g. make a recurring task non-recurring, or vice-versa.
-    # TODO: * This `-reschedule` task is then still in charge of rescheduling tasks,
-    # TODO:   but it can use a default behavior:
-    # TODO: * For regular, non-recurring tasks: update due.date and due.string.
-    # TODO:   (or is it OK to just specify due.string like you currently do?)
-    # TODO: * For recurring tasks, update due.date, and leave due.string at its current value.
-    # TODO: * In order to specify due.date as e.g. "2019-09-05" (without time specifier),
-    # TODO:   you probably have to use `parsedatetime` instead of `dateparser`.
+    If you would like to reschedule to a due date with a *fixed timezone*, please use:
+
+        reschedule_tasks_fixed_timezone() - this will update due.date and due.timezone.
+
+    Example: Reschedule tasks for tomorrow:
+
+        >>> reschedule_tasks(tasks, 'tomorrow')
+
+    CLI Example: Reschedule overdue tasks for tomorrow
+
+        $ todoist-action-cli -sync -due before today -reschedule tomorrow
+
+    API refs:
+    * https://developer.todoist.com/sync/v8/#create-or-update-due-dates
 
     """
     if verbose > -1:
         print("\n - Rescheduling %s tasks for %r..." % (len(tasks), new_date), file=sys.stderr)
+
+    date_rfc3339 = get_rfc3339_datestr(new_date)
+    for task in tasks:
+        if is_recurring(task):
+            # Adjust "due.date", but keep "due.string" as-is:
+            # OBS: It is probably still better to just use `-close` for repeating tasks:
+            params = dict(due={
+                "date": date_rfc3339,
+                "string": get_task_value(task, 'due_string_safe'),
+                "is_recurring": True,
+            })
+            task.update(**params)
+            if verbose > 0:
+                print(f" - Rescheduling task {task['content']} ({get_task_value(task, 'due_string_safe')}) "
+                      f"with params: {params} ",
+                      file=sys.stderr)
+        else:
+            # Adjust due.string, let server parse it:
+            task.update(due={"string": new_date})
+            if verbose > 0:
+                print(f" - Rescheduling task {task['content']} for due.string={new_date}", file=sys.stderr)
+
+    if verbose > -1:
+        print("\n --> OBS: Remember to use `-commit` to push the changes (not `-sync`)! <--\n\n", file=sys.stderr)
+
+    return tasks
+
+
+def reschedule_tasks_due_date(tasks: list, due_date: str, *, verbose=0):
+    """ Reschedule a recurring task by updating due.date but leaving due.string as-is. """
+    date_rfc3339 = get_rfc3339_datestr(due_date)
+    if verbose > -1:
+        print(f"\n - Rescheduling {len(tasks)} tasks for '{due_date}' ({date_rfc3339}) ...",
+              file=sys.stderr)
+        print(" - Remember to use `-commit` to push the changes (not `-sync`)!\n\n", file=sys.stderr)
+    for task in tasks:
+        task.update(due={"date": date_rfc3339})
+        # OBS: Other task date fields aren't updated until you've committed the changes!
+    return tasks
+
+
+def reschedule_tasks_by_due_string(tasks: list, due_string: str, *, check_recurring=True, verbose: int = 0):
+    """ Reschedule tasks using due.string, letting the server parse the string. """
+    if verbose > -1:
+        print(f"\n - Rescheduling {len(tasks)} tasks for '{due_string}' ...", file=sys.stderr)
         print(" - Remember to use `-commit` to push the changes (not `-sync`)!\n\n", file=sys.stderr)
     if check_recurring is True:
         recurring_tasks = get_recurring_tasks(tasks)
         if len(recurring_tasks) > 0:
-            print("\nWARNING: One or more of the tasks being rescheduled is recurring:")
+            print("\nWARNING: One or more of the tasks being rescheduled is currently a recurring task:")
             print_tasks(recurring_tasks)
             print("\n")
-    if timezone == 'date_string':  # Making this the default
-        # Special case; instead of updating the due_date_utc, just send `date_string` to server.
-        # Note: For non-repeating tasks, this is certainly by far the simplest way to update due dates.
-        for task in tasks:
-            if 'due' in task.data:
-                # Support v8 Sync API with dedicated 'due' dict attribute.
-                new_due = {'string': new_date}
-                task.update(due=new_due)
-            else:
-                task.update(date_string=new_date)
-        return tasks
-    if isinstance(new_date, str):
-        new_date_str = new_date  # Save the str
-        new_date = dateparser.parse(new_date)
-        if new_date is None:
-            raise ValueError("Could not parse date %r." % (new_date_str,))
-        # Hmm, dateparser.parse evaluates "tomorrow" as "24 hours from now", not "tomorrow at 0:00:00).
-        # This is problematic since we typically reschedule tasks as all day events.
-        # dateparser has 'tomorrow' hard-coded as alias for "in 1 day", making it hard to re-work.
-        # Maybe it is better to just reschedule using date_string?
-        # But using date_string may overwrite recurring tasks?
-        # For now, just re-set time manually if new_date_str is "today", "tomorrow", etc.
-        if new_date_str in ('today', 'tomorrow') or 'days' in new_date_str:
-            new_date = new_date.replace(hour=23, minute=59, second=59)  # The second is the important part for Todoist.
-        # For more advanced, either use a different date parsing library, or use pendulum to shift the date.
-        # Alternatively, use e.g. parsedatetime, which supports "eod tomorrow".
-    if new_date.tzinfo is None:
-        if timezone == 'local':
-            timezone = tz.tzlocal()
-        elif isinstance(timezone, str):
-            timezone = tz.gettz(timezone)
-        new_date.replace(tzinfo=timezone)
-    # Surprisingly, when adding or updating due_date_utc with the v7.0 Sync API,
-    # `due_date_utc` should supposedly be in ISO8601 format, not the usual ctime-like format. Sigh.
-    new_date_utc = local_time_to_utc(new_date, fmt=ISO_8601_FMT)
     for task in tasks:
-        date_string = task['date_string']
-        task.update(due_date_utc=new_date_utc, date_string=date_string)
-        # Note: other fields are not updated!
-        if update_local:
-            task['due_date_utc'] = new_date_utc
-    if update_local:
-        inject_tasks_date_fields(tasks)
+        task.update(due={"string": due_string})
+        # OBS: Other task date fields aren't updated until you've committed the changes!
+    return tasks
+
+
+def reschedule_tasks_fixed_timezone(tasks: list, due_string: str, timezone: str, *, verbose: int = 0):
+    """ Reschedule tasks using due.date with fixed timezone.
+    Again, the easiest solution is to just let the Todoist server parse the user input string.
+    """
+    if verbose > -1:
+        print(f"\n - Rescheduling {len(tasks)} tasks for '{due_string}' "
+              f"with fixed timezone '{timezone}' ...", file=sys.stderr)
+        print(" - Remember to use `-commit` to push the changes (not `-sync`)!\n\n", file=sys.stderr)
+    for task in tasks:
+        task.update(due={"string": due_string, "timezone": timezone})
+        # OBS: Other task date fields aren't updated until you've committed the changes!
     return tasks
 
 
@@ -765,9 +768,9 @@ def close_tasks(tasks, *, verbose=0):
         'item_uncomplete' - Mark task as uncomplete (re-open it).
 
     """
-    if verbose > 0:
-        print(f"\nClosing tasks (using API method 'item_close') ...")
-        print(" --> Remember to `-commit` the changes to the server! <--")
+    if verbose > -1:
+        print(f"\nClosing tasks (using API method 'item_close') ...", file=sys.stderr)
+        print("\n --> Remember to `-commit` the changes to the server! <--", file=sys.stderr)
     for task in tasks:
         task.close()
     return tasks
@@ -919,8 +922,12 @@ ACTIONS = {
     'p2': p2_filter,
     'p3': p3_filter,
     'p4': p4_filter,
-    # Update task actions:
+    # Reschedule task actions:
     'reschedule': reschedule_tasks,
+    'reschedule-due-date': reschedule_tasks_due_date,
+    'reschedule-by-string': reschedule_tasks_by_due_string,
+    'reschedule-fixed-timezone': reschedule_tasks_fixed_timezone,
+    # Complete task actions:
     'mark-completed': mark_tasks_completed,
     # 'mark-as-done': mark_tasks_completed,  # Deprecated.
     'close': close_tasks,

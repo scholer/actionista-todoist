@@ -25,6 +25,8 @@ except that Todoist has year before time of day, while ctime has year at the end
 
 # Note: To get localized date formats, use the "Babel" package, c.f. https://stackoverflow.com/a/32785195/3241277
 ISO_DATE_FMT = "%Y-%m-%dT%H:%M:%S"
+DATE_TIME_FMT = "%Y-%m-%d %H:%M"  # Prettier format than ISO8601
+DATE_NO_TIME_FMT = "%Y-%m-%d"
 LABEL_REGEX = r"@\w+"
 EXTRA_PROPS_REGEX = r"(?P<prop_group>\{(?P<props>(\w+:\s?[^,]+,?\s?)*)\})"
 PROP_KV_REGEX = r"((?P<key>\w+):\s?(?P<val>[^,]+),?\s?)"
@@ -36,6 +38,7 @@ TASK_REGEX = r"^(?P<title>.*?)" + EXTRA_PROPS_REGEX + r"*\s*$"
 LOCAL_TIMEZONE = tz.tzlocal()
 NO_DUEDATE_DATETIME = datetime.datetime(2099, 12, 31, 23, 59, 59).astimezone(LOCAL_TIMEZONE)
 END_OF_DAY_TIME = datetime.time(23, 59, 59)
+NO_DUE_DATE_PRETTY_STR = "(No due-date)"
 
 
 def get_task_data(task, data_attr="_custom_data"):
@@ -228,6 +231,8 @@ def add_task_date_fields(
             # Convert from UTC (or whatever timezone it has) to local datetime:
             output_dict['due_date_dt'] = output_dict['due_date_dt'].astimezone(tz.tzlocal())
             # output_dict['due_date_dt'] = pytz.utc.localize()
+        output_dict['due_date_pretty_safe'] = output_dict['due_date_dt'].strftime(
+            DATE_NO_TIME_FMT if output_dict['is_allday'] else DATE_TIME_FMT)
     elif input_dict.get('due_date_utc'):
         # I have some old tasks where "due_date_utc" attribute is present but set to None. (weird)
         # print("Task '{content}': parsing due_date_utc: {due_date_utc}   (string: {date_string})".format(**input_dict))
@@ -238,10 +243,13 @@ def add_task_date_fields(
         # xx:xx:59 = due date with no time (v7.0)
         output_dict['is_allday'] = (input_dict['due_date_utc'] or "59")[-2:] == "59"
         output_dict['due_date_dt'] = dateutil.parser.parse(input_dict['due_date_utc']).astimezone(LOCAL_TIMEZONE)
+        output_dict['due_date_pretty_safe'] = output_dict['due_date_dt'].strftime(
+            DATE_NO_TIME_FMT if output_dict['is_allday'] else DATE_TIME_FMT)
     else:
         # No due date specified:
         output_dict['is_allday'] = True
         output_dict['due_string_safe'] = input_dict.get('date_string', None)
+        output_dict['due_date_pretty_safe'] = NO_DUE_DATE_PRETTY_STR
 
     # All datetime objects should have a timezone (either that, or none should have timezone)
     # Mixing timezone-aware with timezone-naive makes comparison impossible (TypeError)
@@ -254,6 +262,7 @@ def add_task_date_fields(
     # Add some "guaranteed", safe fields which are always present:
     output_dict['due_date_safe_dt'] = output_dict.get('due_date_dt', safe_date)
     output_dict['due_date_safe_iso'] = "{:%Y-%m-%dT%H:%M:%S}".format(output_dict.get('due_date_dt', safe_date))
+    output_dict['due_date_safe'] = output_dict.get('due_date', "(No due-date)")
 
     # Parse additional date attributes to datetime objects (with local timezone):
     for key in date_keys:
