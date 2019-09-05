@@ -11,7 +11,6 @@ import operator
 import sys
 import builtins
 
-import dateparser
 import parsedatetime
 from dateutil import tz
 from todoist.models import Item
@@ -19,24 +18,13 @@ from todoist.models import Item
 from actionista import binary_operators
 from actionista.date_utils import ISO_8601_FMT, start_of_day, DATE_DAY_FMT, end_of_day
 from actionista.date_utils import local_time_to_utc, get_rfc3339_datestr
+from actionista.todoist.config import DEFAULT_TASK_PRINT_FMT, DEFAULT_TASK_SORT_KEYS, DEFAULT_TASK_SORT_ORDER
+from actionista.todoist.config import get_config
 from actionista.todoist.tasks_utils import get_task_value, get_recurring_tasks, is_recurring
-from actionista.todoist.tasks_utils import inject_tasks_date_fields, inject_tasks_project_fields
+from actionista.todoist.tasks_utils import inject_tasks_project_fields
 
 
-DEFAULT_TASK_PRINT_FMT = (
-    "{project_name:17} "
-    # "{due_date_safe_dt:%Y-%m-%d %H:%M}  "
-    # "{due_date_safe:^14}  "
-    "{due_date_pretty_safe:18} "
-    "{priority_str} "
-    "{checked_str} "
-    "{content} "
-    "(due: {due_string_safe!r})"
-)
-# Alternative print_fmt examples:
-# print_fmt="{project_name:15} {due_date_safe_dt:%Y-%m-%d %H:%M  } {content}",
-# print_fmt="{project_name:15} {due_date_safe_dt:%Y-%m-%d %H:%M}  {checked_str} {content}",
-# print_fmt="{project_name:15} {due_date_safe_dt:%Y-%m-%d %H:%M}  {priority_str} {checked_str} {content}",
+CONFIG = get_config()
 
 
 def print_tasks(
@@ -45,7 +33,8 @@ def print_tasks(
         header=None, sep: str = "\n",
         *,
         data_attr: str = "_custom_data",
-        verbose: int = 0
+        verbose: int = 0,
+        config=None,
 ):
     """ Print tasks, using a python format string.
 
@@ -66,6 +55,7 @@ def print_tasks(
             but I prefer to add derived data fields in a separate Item._custom_data,
             so that they don't get persisted when writing the cache to disk.
         verbose: The verbosity to print informational messages with during the filtering process.
+        config: Optional configuration dict.
 
     Returns: List of tasks.
 
@@ -93,6 +83,10 @@ def print_tasks(
         # We also have the same above fields for `date_added` and `completed_date`.
 
     """
+    if config is None:
+        config = CONFIG
+    if print_fmt is None:
+        print_fmt = config.get('default_task_print_fmt', DEFAULT_TASK_PRINT_FMT) if config else DEFAULT_TASK_PRINT_FMT
     if verbose > -1:
         print(f"\n - Printing {len(tasks)} tasks",
               f"separated by {sep!r}, using print_fmt:\n{print_fmt!r}.\n" if verbose else "...\n", file=sys.stderr)
@@ -108,8 +102,8 @@ def print_tasks(
     return tasks
 
 
-def sort_tasks(tasks, keys="project_name,priority_str,content", order="ascending",
-               *, data_attr="_custom_data", verbose=0):
+def sort_tasks(tasks, keys=DEFAULT_TASK_SORT_KEYS, order=DEFAULT_TASK_SORT_ORDER,
+               *, data_attr="_custom_data", verbose=0, config=None):
     """ Sort the list of tasks, by task attribute in ascending or descending order.
 
     Args:
@@ -133,6 +127,12 @@ def sort_tasks(tasks, keys="project_name,priority_str,content", order="ascending
         due_date,priority,item_order
 
     """
+    if config is None:
+        config = CONFIG
+    if keys is None:
+        keys = config.get('default_task_sort_keys', DEFAULT_TASK_SORT_KEYS) if config else DEFAULT_TASK_SORT_KEYS
+    if order is None:
+        order = config.get('default_task_sort_order', DEFAULT_TASK_SORT_ORDER) if config else DEFAULT_TASK_SORT_ORDER
     if verbose > -1:
         print(f"\n - Sorting {len(tasks)} tasks by {keys!r} ({order}).", file=sys.stderr)
     if isinstance(keys, str):

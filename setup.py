@@ -38,7 +38,7 @@ See `README.rst` for usage.
 #   twine upload dist/*
 setup(
     name='actionista-todoist',
-    version='2019.09.03',
+    version='2019.09.05',
     packages=find_packages(),  # List all packages (directories) to include in the source dist.
     url='https://github.com/scholer/actionista-todoist',
     license='GNU General Public License v3 (GPLv3)',
@@ -51,6 +51,8 @@ setup(
         'console_scripts': [
             'todoist-action-cli=actionista.todoist.action_cli:action_cli',
             'actionista-todoist=actionista.todoist.action_cli:action_cli',  # New alias
+            'todoist-action-config=actionista.todoist.config_cli.todoist_config_cli'
+            'actionista-todoist-config=actionista.todoist.config_cli.todoist_config_cli'  # Alias
             'todoist-adhoc=actionista.todoist.adhoc_cli:main',
             'todoist-adhoc-cli=actionista.todoist.adhoc_cli:main',  # alias
             'todoist_today_or_overdue=actionista.todoist.adhoc_cli:print_today_or_overdue_tasks',
@@ -65,9 +67,10 @@ setup(
         'pytz',             # Timezone support.
         'python-dateutil',  # Parsing ISO timestamps.
         'dateparser',       # Required for human_date_to_iso()
-        'parsedatetime',    # Has better concept of accuracy of the parsed date/time than dateparser.
+        'parsedatetime',    # Has better concept of accuracy of parsed date/time than dateparser.
+        'click',            # CLI package. (Only used for auxiliary CLI programs)
     ],
-    python_requires='>=3.5',  # Type-hints.
+    python_requires='>=3.6',  # Type-hints, f-strings,
     classifiers=[
         # How mature is this project? Common values are
         #   3 - Alpha

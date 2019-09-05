@@ -23,7 +23,7 @@ Update: The REST API is out.
 
 import requests
 
-from actionista.todoist.utils import get_token
+from actionista.todoist.config import get_token
 
 
 class TodoistRestApi:

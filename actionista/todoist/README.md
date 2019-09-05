@@ -17,6 +17,27 @@ You start out with a list of *all* tasks, and then select tasks using one of the
 filters available. You can then sort, print, and reschedule the selected tasks.
 
 
+Configuration:
+--------------
+
+In order to use the Todoist API, you need to configure an API access token.
+You can use the `actionista-todoist-config` CLI to set this up.
+
+You can run the full interactive configuration using:
+
+	$ actionista-todoist-config --interactive
+
+Alternatively, if you just need to update your API token, you can run:
+
+	$ actionista-todoist-config --check-token --token 41f1c812be19cc3bcee6c6c2a569c545f7bfd7e1
+
+(Replace `41f1c812be19cc3bcee6c6c2a569c545f7bfd7e1` with your actual API token.)
+
+You can find your API token in the Todoist web app, under 'Settings' -> 'Integrations',
+or by browsing directly to this page: https://todoist.com/prefs/integrations
+(working directions as of September 2019).
+
+
 Examples:
 ---------
 

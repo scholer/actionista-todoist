@@ -38,7 +38,7 @@ from actionista import binary_operators
 from actionista.todoist import action_commands
 from actionista.todoist.action_commands import ACTIONS
 from .tasks_utils import inject_tasks_date_fields, inject_tasks_project_fields, CUSTOM_FIELDS
-from actionista.todoist.utils import get_config, get_token
+from actionista.todoist.config import get_config, get_token
 
 NEWLINE = '\n'
 
