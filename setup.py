@@ -59,7 +59,7 @@ setup(
 
             # todoist_cli entry points:
             'todoist-cli=actionista.todoist.todoist_cli:todoist_cli',
-            'todoist-add-task=actionista.todoist.todoist_cli.add_task',
+            'todoist-add-task=actionista.todoist.todoist_cli:add_task_cli',
 
             # Entry points for adhoc_cli commands (argparse-based):
             'todoist-adhoc=actionista.todoist.adhoc_cli:main',
