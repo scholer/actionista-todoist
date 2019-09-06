@@ -190,7 +190,10 @@ Alternative Todoist CLI:
 
 This package also provides a more "traditional" CLI for Todoist.
 
-The traditional CLI currently
+The traditional CLI currently provides the following features:
+
+* `add-task` - which can be used to add a new task to Todoist.
+* `print-projects` - which can be used to print your Todoist projects.
 
 
 
@@ -218,5 +221,9 @@ Note that `todoist-cli add-task` is equivalent to `todoist-add-task`.
 You can use whichever format you prefer.
 
 
+### Example: Print projects
 
+You can use the `print-projects` CLI command to print your Todoist projects:
+
+	$ todoist-cli print-projects
 

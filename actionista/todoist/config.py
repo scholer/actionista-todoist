@@ -25,13 +25,18 @@ DEFAULT_TASK_PRINT_FMT = (
 # print_fmt="{project_name:15} {due_date_safe_dt:%Y-%m-%d %H:%M  } {content}",
 # print_fmt="{project_name:15} {due_date_safe_dt:%Y-%m-%d %H:%M}  {checked_str} {content}",
 # print_fmt="{project_name:15} {due_date_safe_dt:%Y-%m-%d %H:%M}  {priority_str} {checked_str} {content}",
-
-DEFAULT_TASK_SORT_KEYS = "project_name,priority_str,content"
+DEFAULT_TASK_SORT_KEYS = "project_name,priority_str,content".split(",")
 DEFAULT_TASK_SORT_ORDER = "ascending"
+DEFAULT_PROJECT_PRINT_FMT = "{name}"
+DEFAULT_PROJECT_SORT_KEYS = "name".split(",")
+DEFAULT_PROJECT_SORT_ORDER = "ascending"
 DEFAULT_CONFIG = {
     'default_task_print_fmt': DEFAULT_TASK_PRINT_FMT,
     'default_task_sort_keys': DEFAULT_TASK_SORT_KEYS,
     'default_task_sort_order': DEFAULT_TASK_SORT_ORDER,
+    'default_project_print_fmt': DEFAULT_PROJECT_PRINT_FMT,
+    'default_project_sort_keys': DEFAULT_PROJECT_SORT_KEYS,
+    'default_project_sort_order': DEFAULT_PROJECT_SORT_ORDER,
 }
 CONFIG_PATHS = [
     "~/.todoist_config.yaml"
