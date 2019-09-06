@@ -156,10 +156,10 @@ You can add labels like you normally would using `@label`:
 
 However, as you can see, using "#project" and the normal ways of specifying due date and priority doesn't work.
 
-You can provide information on `project`, `due` date, `priority`, and `labels` explicitly using `=`:
+You can provide information on `project`, `due` date, `priority`, and `labels` explicitly using `key=value` notation:
 
-	$ todoist-action-cli -sync -add-task "Test task 006" project=Work due=tomorrow priority=p1 labels=awaiting,devtest -commit \
-	  -filter content startswith "Test" -print "{content}"
+	$ todoist-action-cli -sync -add-task "Test task 006" project=Work due=tomorrow priority=p1 \
+	  labels=awaiting,devtest -commit -filter content startswith "Test" -print "{content}"
 
 
 ### Showing changes before they are submitted:
@@ -183,4 +183,40 @@ If that happens, you can run the following command to delete the cache, thereby 
 If so, please consider submitting an issue at https://github.com/scholer/actionista-todoist/issues.
 If you are technically proficiency and you have managed to fix a bug in this program,
 I welcome you to submit a pull-request at https://github.com/scholer/actionista-todoist/pulls.*
+
+
+Alternative Todoist CLI:
+========================
+
+This package also provides a more "traditional" CLI for Todoist.
+
+The traditional CLI currently
+
+
+
+Examples:
+---------
+
+### Example: Add a new task:
+
+Add a task:
+
+	$ todoist-cli add-task "Test task 1234"
+
+Add a task, specifying due-date, project, labels, priority, and a note:
+
+	$ todoist-cli add-task "Test task 1235 @devtest" --due "tomorrow 2 pm" --project "Todoist-playground" --label "playground" --priority p4 --note "This is a third note"
+
+As you can see, you can add labels using "@label" as you do in the Todoist web-app,
+or using `--label <label>`. The following three commands are all equivalent:
+
+	$ todoist-cli add-task "Test task 1235" --label "playground" --label devtest
+	$ todoist-cli add-task "Test task 1235 @devtest" --label "playground"
+	$ todoist-cli add-task "Test task 1235 @devtest @playground"
+
+Note that `todoist-cli add-task` is equivalent to `todoist-add-task`.
+You can use whichever format you prefer.
+
+
+
 

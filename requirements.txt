@@ -12,3 +12,4 @@ regex
 dateparser
 future
 parsedatetime
+click

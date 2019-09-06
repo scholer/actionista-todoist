@@ -41,6 +41,50 @@ END_OF_DAY_TIME = datetime.time(23, 59, 59)
 NO_DUE_DATE_PRETTY_STR = "(No due-date)"
 
 
+def get_proper_priority_int(priority) -> int:
+    """ Return a correct priority integer value for use with the API.
+
+    The input priority can be either a string ("p1", "p2", "p3", or "p4") where "p1" is
+    highest priority and "p4" is lowest priority. This is converted to one of the values
+    (4, 3, 2, or 1), where priority=4 is highest priority.
+
+    Alternatively, the input priority can be an integer, in which case we simply check that the
+    integer is either 1, 2, 3, or 4, where priority=4 is highest priority.
+
+    Examples:
+        priority = "p3"
+        priority = get_proper_priority_int(priority)
+        assert priority == 2
+
+        priority = 1
+        priority = get_proper_priority_int(priority)
+        assert priority == 1
+
+        priority = 0
+        priority = get_proper_priority_int(priority)
+        ValueError: Argument `priority` must be between 1 and 4 (if int).
+
+        priority = None
+        priority = get_proper_priority_int(priority)
+        TypeError: Argument `priority` must be str or int.
+    """
+    if isinstance(priority, str):
+        # Priority in the form of "p1" to "p4".
+        priority_str = priority
+        priority_str_map = dict(p1=4, p2=3, p3=2, p4=1)
+        try:
+            priority = priority_str_map[priority]
+        except KeyError:
+            raise ValueError("Argument `priority` must be one of 'p1', 'p2', 'p3', or 'p4' (if str).")
+    else:
+        # Integer between 1 and 4:
+        if not isinstance(priority, int):
+            raise TypeError("Argument `priority` must be str or int.")
+        if priority < 1 or 4 < priority:
+            raise ValueError("Argument `priority` must be between 1 and 4 (if int).")
+    return priority
+
+
 def get_task_data(task, data_attr="_custom_data"):
     if isinstance(task, Item):
         # Try the "_custom_data" first (it should include original data as well), fall back to Item.data:

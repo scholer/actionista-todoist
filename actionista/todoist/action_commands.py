@@ -89,7 +89,8 @@ def print_tasks(
         print_fmt = config.get('default_task_print_fmt', DEFAULT_TASK_PRINT_FMT) if config else DEFAULT_TASK_PRINT_FMT
     if verbose > -1:
         print(f"\n - Printing {len(tasks)} tasks",
-              f"separated by {sep!r}, using print_fmt:\n{print_fmt!r}.\n" if verbose else "...\n", file=sys.stderr)
+              f"separated by {sep!r}, using print_fmt:\n{print_fmt!r}.\n" if verbose else "...\n",
+              file=sys.stderr)
     if header:
         print(header)
     # Use `task._custom_data`, which is a copy of task.data with extra stuff added (if available).
@@ -198,10 +199,11 @@ def filter_tasks(
     if op_name == 'le' and 'date' in taskkey and value[-2:] != '59':
         print("\nWARNING: You are using the less-than-or-equal-to (`le`) operator with a data value, "
               "which can be tricky. Consider using the less-than (`lt`) operator instead. If you do use the "
-              "less-than-or-equal-to (`le`) operator, make sure to specify full time in comparison.\n")
+              "less-than-or-equal-to (`le`) operator, make sure to specify full time in comparison.\n",
+              file=sys.stderr)
     if taskkey == 'due_date_utc':
         print("\nNOTICE: You are using 'due_date_utc' as filter taskkey. This has the rather-unhelpful "
-              "format: 'Mon 26 Mar 2018 21:59:59 +0000'.\n")
+              "format: 'Mon 26 Mar 2018 21:59:59 +0000'.\n", file=sys.stderr)
     # We often use "_" as placeholeder on the command line, because we cannot enter e None value:
     if default == '_' or default == '__None__':
         default = None
@@ -234,7 +236,7 @@ def filter_tasks(
                 # print(f"Using `value_transform` {value_transform!r} from `globals()`...")
             else:
                 if verbose > -1:
-                    print(f"Creating filter value transform by `eval({value_transform!r})` ...")
+                    print(f"Creating filter value transform by `eval({value_transform!r})` ...", file=sys.stderr)
                 t = eval(value_transform)
                 if hasattr(t, '__call__'):
                     value_transform = t
@@ -264,7 +266,8 @@ def filter_tasks(
             task_value = task.get(taskkey, default_)
         if task_value is not None and type(task_value) != type(value):
             # Note: We are converting the *comparison value*, not the task value:
-            print("NOTICE: `type(task_value) != type(value)` - Coercing `value` to %s:" % type(task_value))
+            print("NOTICE: `type(task_value) != type(value)` - Coercing `value` to %s:" % type(task_value),
+                  file=sys.stderr)
             value = type(task_value)(value)
         return task_value
 
@@ -301,7 +304,8 @@ def filter_tasks(
             task_value = get_value(task, default)
             return op(task_value, value) != negate
         if default is None:
-            print('\nWARNING: filter_tasks() called with missing="default" but no default value given (is None).\n')
+            print('\nWARNING: filter_tasks() called with missing="default" but no default value given (is None).\n',
+                  file=sys.stderr)
     else:
         raise ValueError("Argument `missing` value %r not recognized." % (missing,))
 
@@ -695,7 +699,7 @@ def update_tasks(tasks, *, verbose=0, **kwargs):
 
     """
     if verbose > -1:
-        print("Updating tasks using kwargs:", kwargs)
+        print("Updating tasks using kwargs:", kwargs, file=sys.stderr)
     for task in tasks:
         task.update(**kwargs)
     return tasks
@@ -729,10 +733,10 @@ def mark_tasks_completed(tasks, method='close', *, verbose=0):
 
     """
     if verbose > 0:
-        print(f"\nMarking tasks as complete using method {method!r}...")
+        print(f"\nMarking tasks as complete using method {method!r}...", file=sys.stderr)
         if method in ('close', 'item_close'):
-            print(f"\nOBS: Consider using `-close` command directly instead ...")
-        print(" --> Remember to `-commit` the changes to the server! <--")
+            print(f"\nOBS: Consider using `-close` command directly instead ...", file=sys.stderr)
+        print(" --> Remember to `-commit` the changes to the server! <--", file=sys.stderr)
 
     for task in tasks:
         if method in ('close', 'item_close'):
@@ -800,7 +804,7 @@ def complete_and_update_date_for_recurring_tasks(tasks, new_date=None, due_strin
     """
     if verbose > 0:
         print(f"\nCompleting recurring tasks and moving the due date to {new_date if new_date else 'next occurrence'} "
-              f"(using API method 'item_update_date_complete') ...")
+              f"(using API method 'item_update_date_complete') ...", file=sys.stderr)
         print("\n --> Remember to `-commit` the changes to the server! <--", file=sys.stderr)
     print("NOTICE: todoist.models.Item.update_date_complete() is currently broken in "
           "todoist-python package version 8.0.0.")
@@ -823,7 +827,7 @@ def uncomplete_tasks(tasks, *, verbose=0):
 
     """
     if verbose > 0:
-        print(f"\nRe-opening tasks (using API method 'item_uncomplete') ...")
+        print(f"\nRe-opening tasks (using API method 'item_uncomplete') ...", file=sys.stderr)
         print("\n --> Remember to `-commit` the changes to the server! <--", file=sys.stderr)
     for task in tasks:
         task.uncomplete()
@@ -844,7 +848,7 @@ def archive_tasks(tasks, *, verbose=0):
 
     """
     if verbose > 0:
-        print(f"\nArchiving tasks (using API method 'item_archive') ...")
+        print(f"\nArchiving tasks (using API method 'item_archive') ...", file=sys.stderr)
         print("\n --> Remember to `-commit` the changes to the server! <--", file=sys.stderr)
     for task in tasks:
         task.archive()
@@ -865,7 +869,7 @@ def delete_tasks(tasks, *, verbose=0):
 
     """
     if verbose > 0:
-        print(f"\nArchiving tasks (using API method 'item_delete') ...")
+        print(f"\nArchiving tasks (using API method 'item_delete') ...", file=sys.stderr)
         print("\n --> Remember to `-commit` the changes to the server! <--", file=sys.stderr)
     for task in tasks:
         task.delete()
@@ -881,14 +885,20 @@ def add_task(tasks, api, task_content, *, project=None, due=None, priority=None,
     Args:
         tasks:  List of tasks.
         api: tooist.api.TodoistAPI object (so we can get projects, labels, etc.)
+        due: Due date (str)
+        project: Project name (str)
+        labels: List of task labels (names)
+        priority: Task priority, either number [1-4] or str ["p4", "p3", 'p2", "p1"].
+        auto_reminder: Automatically add a default reminder to the task, if task is due at a specific time of day.
+        auto_parse_labels: Automatically extract "@label" strings from the task content.
         verbose: Increase or decrease the verbosity of the information printed during function run.
 
     Returns:
         tasks:  List of tasks (after deleting them).
 
     """
-    if verbose > 0:
-        print(f"\nAdding new task (using API method 'item_add') ...")
+    if verbose > -1:
+        print(f"\nAdding new task (using API method 'item_add') ...", file=sys.stderr)
         print("\n --> Remember to `-commit` the changes to the server! <--", file=sys.stderr)
 
     params = {'auto_reminder': auto_reminder, 'auto_parse_labels': auto_parse_labels}

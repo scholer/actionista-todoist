@@ -38,7 +38,7 @@ See `README.rst` for usage.
 #   twine upload dist/*
 setup(
     name='actionista-todoist',
-    version='2019.09.05',
+    version='2019.09.06',  # remember to also update __init__.py
     packages=find_packages(),  # List all packages (directories) to include in the source dist.
     url='https://github.com/scholer/actionista-todoist',
     license='GNU General Public License v3 (GPLv3)',
@@ -49,10 +49,19 @@ setup(
     keywords=['Productivity', 'TODO', 'Todoist', 'GTD', 'Rewards', 'Tasks', 'CLI'],
     entry_points={
         'console_scripts': [
+            # Action CLI entry points:
             'todoist-action-cli=actionista.todoist.action_cli:action_cli',
             'actionista-todoist=actionista.todoist.action_cli:action_cli',  # New alias
-            'todoist-action-config=actionista.todoist.config_cli.todoist_config_cli'
-            'actionista-todoist-config=actionista.todoist.config_cli.todoist_config_cli'  # Alias
+
+            # todoist config CLI entry points:
+            'todoist-action-config=actionista.todoist.config_cli:todoist_config_cli',
+            'actionista-todoist-config=actionista.todoist.config_cli:todoist_config_cli',  # Alias
+
+            # todoist_cli entry points:
+            'todoist-cli=actionista.todoist.todoist_cli:todoist_cli',
+            'todoist-add-task=actionista.todoist.todoist_cli.add_task',
+
+            # Entry points for adhoc_cli commands (argparse-based):
             'todoist-adhoc=actionista.todoist.adhoc_cli:main',
             'todoist-adhoc-cli=actionista.todoist.adhoc_cli:main',  # alias
             'todoist_today_or_overdue=actionista.todoist.adhoc_cli:print_today_or_overdue_tasks',
