@@ -12,11 +12,20 @@ Version 2019.09.09:
 	The derived label fields can be used e.g. for printing, sorting, or filtering:
 	* `todoist-action-cli -sync -filter label_names contains habit -sort "labels_str,project_name" -print "{content} ({labels_str})"
 	* Please notice the order of operands for the `-filter` command: `filter <key> <op> <value>`.
+
 * NEW: Added convenience **`-label`** filter action, which will filter tasks based on the given label.
  	`-label <label>` is equivalent to `-filter label_names icontains <label>`.
 	* Note the use of `icontains`, making the comparison case-insensitive.
+
+* NEW: Added support for negative-filtering using exclamation marks.
+  Using negative filtering was already possible using `-filter <key> not <op> <value>`,
+  or one of the many "negative-filtering" convenience filter actions.
+  But this adds support for using "!value" to negate the filter,
+  e.g. `-label !habit` to filter out tasks with the "habit" label.
+
 * NEW: Added support to disable injecting 'label_names' and 'labels_str' derived fields, using:
 	* `todoist-action-cli inject_task_labels_fields=0`.
+
 * NEW: Added support for disabling all injections of derived data fields using:
 	* `todoist-action-cli inject_derived_task_fields=0`.
 
@@ -27,6 +36,7 @@ Version 2019.09.09:
 	Before, the case-insensitive operators would just use `a.lower()` (or occationally `str(a).lower()`).
 	But now, the elements in a list/set/dict are converted to lowercase, recursively.
 	For dicts, the keys are converted to lowercase as well.
+
 
 *For developer-relevant code changes, please check the git commit log.*
 

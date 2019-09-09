@@ -212,9 +212,16 @@ def filter_tasks(
     if value_transform == '_' or value_transform == '__None__':
         value_transform = None
     if isinstance(negate, str) and negate.lower() in ('false', '_', '__none__', '0'):
+        # Enabling easier ways to specify `negate` on the command line.
         negate = False
 
     negate = bool(negate)
+    if isinstance(value, str) and len(value) > 0 and value[0] == "!":
+        # Using exclamation mark is an established way to make a negative filter,
+        # e.g. `-label !habit` to filter-out tasks with the "habit" label.
+        negate = not negate
+        value = value[1:]
+
     op = getattr(binary_operators, op_name)
     # I'm currently negating explicitly in the all four 'missing' cases,
     # but I could also just have re-defined `op` as: `def op(a, b): return _op(a, b) != negate`
