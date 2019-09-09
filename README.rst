@@ -80,7 +80,7 @@ but has now been separated into its own package, imported as: ``actionista.todoi
 
 NOTE: This application is not created by, affiliated with, or supported by Doist.
 It is a third-party command line utility that is making use of the official Todoist API,
-as documented by https://developer.todoist.com/sync/v7/.
+as documented by https://developer.todoist.com/sync/v8/.
 
 
 

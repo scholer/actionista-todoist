@@ -162,6 +162,18 @@ You can provide information on `project`, `due` date, `priority`, and `labels` e
 	  labels=awaiting,devtest -commit -filter content startswith "Test" -print "{content}"
 
 
+### Rename a task:
+
+To rename an existing task, first select it using one or more filters, then use the `-rename` action.
+For example:
+
+	$ todoist-action-cli -label devtest -content "Test task 1435" -sort -print -rename "Test task 1850" -commit
+
+Then check that it has been renamed:
+
+	$ todoist-action-cli -label devtest -content "Test task *" -sort -print
+
+
 ### Showing changes before they are submitted:
 
 If you are curious about what changes will be submitted to the server, you can see them before you `-commit`,

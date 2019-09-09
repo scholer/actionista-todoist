@@ -38,13 +38,13 @@ See `README.rst` for usage.
 #   twine upload dist/*
 setup(
     name='actionista-todoist',
-    version='2019.09.09',  # remember to also update __init__.py
+    version='2019.9.9',  # remember to also update __init__.py
     packages=find_packages(),  # List all packages (directories) to include in the source dist.
     url='https://github.com/scholer/actionista-todoist',
     license='GNU General Public License v3 (GPLv3)',
     author='Rasmus Scholer Sorensen',
     author_email='rasmusscholer@gmail.com',
-    description='Actionista Action-Chain CLI for Todoist. Inspired by the UNIX tool "find".',
+    description='Actionista Action-Chain CLI for Todoist. Manage your Todoist tasks from the command line.',
     long_description=long_description,
     keywords=['Productivity', 'TODO', 'Todoist', 'GTD', 'Rewards', 'Tasks', 'CLI'],
     entry_points={

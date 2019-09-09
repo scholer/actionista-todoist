@@ -1,3 +1,4 @@
 
 
-__version__ = '2019.09.09'  # remember to also update setup.py
+# Do not zero-pad month or day:
+__version__ = '2019.9.9'  # remember to also update setup.py

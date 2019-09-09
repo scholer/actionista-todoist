@@ -23,6 +23,10 @@ Version 2019.09.09:
   But this adds support for using "!value" to negate the filter,
   e.g. `-label !habit` to filter out tasks with the "habit" label.
 
+* NEW: Added support for renaming tasks, using the `-rename` action. For example:
+
+	$ todoist-action-cli -content "Test task 123" -print -rename "Test task ABC" -commit
+
 * NEW: Added support to disable injecting 'label_names' and 'labels_str' derived fields, using:
 	* `todoist-action-cli inject_task_labels_fields=0`.
 

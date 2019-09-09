@@ -708,19 +708,22 @@ def reschedule_tasks_fixed_timezone(tasks: list, due_string: str, timezone: str,
 def update_tasks(tasks, *, verbose=0, **kwargs):
     """ Generic task updater. (NOT FUNCTIONAL)
 
-    Todoist task updating caveats:
-
-    * priority: This is VERY weird! From the v7 sync API docs:
-        > "Note: Keep in mind that "very urgent" is the priority 1 on clients. So, p1 will return 4 in the API."
-        In other words, these are all reversed:
-            p4 -> 1, p3 -> 2, p2 -> 3, p1 -> 4.
-        That is just insane.
-
     """
     if verbose > -1:
         print("Updating tasks using kwargs:", kwargs, file=sys.stderr)
     for task in tasks:
         task.update(**kwargs)
+    return tasks
+
+
+def rename_tasks(tasks, new_content, *, verbose=0):
+    """ Rename selected tasks, using API method 'item_update'. """
+    if verbose > -1:
+        print(f'\n - Renaming {len(tasks)} selected task(s) to "{new_content}" ...')
+    for task in tasks:
+        if verbose > -1:
+            print(f' - Renaming task: "{task.data["content"]}" --> "{new_content}"')
+        task.update(content=new_content)
     return tasks
 
 
@@ -1030,6 +1033,8 @@ ACTIONS = {
     'reschedule-due-date': reschedule_tasks_due_date,
     'reschedule-by-string': reschedule_tasks_by_due_string,
     'reschedule-fixed-timezone': reschedule_tasks_fixed_timezone,
+    # Rename task:
+    'rename': rename_tasks,
     # Complete task actions:
     'mark-completed': mark_tasks_completed,
     # 'mark-as-done': mark_tasks_completed,  # Deprecated.
