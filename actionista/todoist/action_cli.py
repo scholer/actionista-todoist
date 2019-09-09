@@ -441,7 +441,7 @@ def action_cli(argv=None, verbose=0):
         """
         # Remove custom fields (in preparation for JSON serialization during `_write_cache()`:
         n_before = len(tasks)
-        print("\nSyncing... (fetching updates FROM the server; use `commit` to push changes!")
+        print("\nSyncing... (fetching updates FROM the server; use `commit` to push changes!)")
         for task in api.state['items']:
             for k in CUSTOM_FIELDS:
                 task.data.pop(k, None)  # pop(k, None) returns None if key doesn't exists, unlike `del task[k]`.

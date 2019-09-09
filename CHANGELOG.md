@@ -30,6 +30,14 @@ Version 2019.09.09:
 	* `todoist-action-cli inject_derived_task_fields=0`.
 
 
+### `todoist-cli` changes:
+
+* `todoist-cli add-task` now uses lower-case comparison to convert
+  project_name to project_id and label_name to label_id. You can now use
+  `$ todoist-cli add-task "Test123" --project dev --label open-source`
+  even if the project is actually written "Dev" and label "Open-Source".
+
+
 ### Other code changes:
 
 * The "case-insensitive" operators in `actionista.binary_operators` now work for lists, sets, and dicts.

@@ -90,7 +90,13 @@ def add_task(
     if sync:
         api.sync()
     if verbose >= 0:
-        print(f"\nAdding new task...", file=sys.stderr)
+        print(f"\nAdding new task:", file=sys.stderr)
+        print(f" - content:", content, file=sys.stderr)
+        print(f" - project:", project, file=sys.stderr)
+        print(f" - labels:", list(labels) if labels else None, file=sys.stderr)
+        print(f" - priority:", priority, file=sys.stderr)
+        print(f" - due:", due, file=sys.stderr)
+        print(f" - note:", note, file=sys.stderr)
 
     params = {}
 
@@ -101,7 +107,13 @@ def add_task(
         if isinstance(project, str):
             # We need to find project_id from project_name:
             project_name = project
-            project_id = next(iter(p['id'] for p in api.projects.all() if p['name'] == project_name))
+            try:
+                project_id = next(iter(p['id'] for p in api.projects.all() if p['name'].lower() == project_name.lower()))
+            except StopIteration:
+                msg = f'Project name "{project_name}" was not recognized. Please create project first. '
+                print(f"\n\nERROR: {msg}\n")
+                print("(You can use `todoist-cli print-projects` to see a list of available projects.)\n")
+                raise ValueError(msg) from None  # raise from None to not show the StopIteration exception.
         else:
             # Project should be a project_id:
             assert isinstance(project, int)
@@ -112,9 +124,9 @@ def add_task(
         if isinstance(labels, str):
             labels = [label.strip() for label in labels.split(",")]
         if any(isinstance(label, str) for label in labels):
-            # Assume label-name: We need to find label_id from label_name:
-            labels_by_name = {label['name']: label for label in api.labels.all()}
-            labels = [label if isinstance(label, int) else labels_by_name[label]['id'] for label in labels]
+            # Assume label-name: We need to find label_id from label_name (lower-cased):
+            labels_by_name = {label['name'].lower(): label for label in api.labels.all()}
+            labels = [label if isinstance(label, int) else labels_by_name[label.lower()]['id'] for label in labels]
         params['labels'] = labels
 
     if priority is not None:
