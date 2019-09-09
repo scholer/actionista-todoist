@@ -16,6 +16,8 @@ from dateutil import tz
 from todoist.models import Item
 
 from actionista import binary_operators
+# 'in' is a reserved keyword, so the equivalent command is `in_`:
+setattr(binary_operators, 'in', binary_operators.in_)
 from actionista.date_utils import ISO_8601_FMT, start_of_day, DATE_DAY_FMT, end_of_day
 from actionista.date_utils import local_time_to_utc, get_rfc3339_datestr
 from actionista.todoist.config import DEFAULT_TASK_PRINT_FMT, DEFAULT_TASK_SORT_KEYS, DEFAULT_TASK_SORT_ORDER
@@ -264,7 +266,9 @@ def filter_tasks(
             task_value = due_dict.get(taskkey.replace('due_', ''))  # items in the 'due' dict don't have 'due_' prefix
         else:
             task_value = task.get(taskkey, default_)
-        if task_value is not None and type(task_value) != type(value):
+        # Coercing the comparison value may not be optimal for lists, e.g. `-filter label_names contains 'habit'`
+        # Maybe only coerce for ints? (e.g. priority?)
+        if task_value is not None and type(task_value) != type(value) and isinstance(task_value, int):
             # Note: We are converting the *comparison value*, not the task value:
             print("NOTICE: `type(task_value) != type(value)` - Coercing `value` to %s:" % type(task_value),
                   file=sys.stderr)
@@ -519,6 +523,14 @@ def project_filter(tasks, *args, **kwargs):
 def project_iglob_filter(tasks, value, *args, **kwargs):
     """ Convenience filter action using taskkey="content", op_name="iglob". """
     return filter_tasks(tasks, taskkey="project_name", op_name="iglob", value=value, *args, **kwargs)
+
+
+def label_filter(tasks, value, *args, **kwargs):
+    """ Convenience filter action using taskkey="label_names", op_name="iin".
+    OBS: The syntax is `-filter <taskkey> <op> <value>`,
+    so we should be using `contains` as the op name.
+    """
+    return filter_tasks(tasks, taskkey="label_names", op_name="icontains", value=value, *args, **kwargs)
 
 
 def priority_filter(tasks, *args, **kwargs):
@@ -993,12 +1005,15 @@ ACTIONS = {
     'content': content_filter,  # `-content endswith "sugar".
     'name': content_filter,  # Alias for content_filter.
     'project': project_filter,
+    # Label filter:
+    'label': label_filter,  # Alias for `-filter label_names icontains <value>`
+    # Priority filter (where priority=4 is higher than priority=1)
     'priority': priority_filter,
-    # More derived 'priority' filters:
     'priority-eq': priority_eq_filter,
     'priority-ge': priority_ge_filter,
     'priority-str': priority_str_filter,
     'priority-str-eq': priority_str_eq_filter,
+    # priority_str filters (where "p1" has higher priority than "p4")
     'p1': p1_filter,
     'p2': p2_filter,
     'p3': p3_filter,

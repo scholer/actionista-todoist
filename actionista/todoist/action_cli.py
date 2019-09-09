@@ -1,4 +1,4 @@
-# Copyright 2018 Rasmus Scholer Sorensen <rasmusscholer@gmail.com>
+# Copyright 2018-2019 Rasmus Scholer Sorensen <rasmusscholer@gmail.com>
 """
 
 Actionista Action CLI for Todoist.
@@ -37,7 +37,8 @@ from pprint import pprint
 from actionista import binary_operators
 from actionista.todoist import action_commands
 from actionista.todoist.action_commands import ACTIONS
-from .tasks_utils import inject_tasks_date_fields, inject_tasks_project_fields, CUSTOM_FIELDS
+from .tasks_utils import inject_tasks_date_fields, inject_tasks_project_fields, inject_tasks_labels_fields
+from .tasks_utils import CUSTOM_FIELDS
 from actionista.todoist.config import get_config, get_token
 
 NEWLINE = '\n'
@@ -394,17 +395,25 @@ def action_cli(argv=None, verbose=0):
     # so we should have `todoist.model.Item` object instances (not just the dicts received from the server):
     task_items = api.state['items']
 
-    if int(base_kwargs.get('inject_task_date_fields', 1)):
-        # Inject custom date fields, e.g. `due_date_iso`, `due_date_dt`, and `checked_str`:
-        if verbose >= 2:
-            print("Parsing dates and creating ISO strings...", file=sys.stderr)
-        inject_tasks_date_fields(task_items, strict=False)
+    if int(base_kwargs.get('inject_derived_task_fields', 1)):
 
-    if int(base_kwargs.get('inject_task_project_fields', 1)):
-        # Inject project info, so we can access e.g. task['project_name']:
-        if verbose >= 1:
-            print("Injecting project info...", file=sys.stderr)
-        inject_tasks_project_fields(tasks=task_items, projects=api.projects.all())
+        if int(base_kwargs.get('inject_task_date_fields', 1)):
+            # Inject custom date fields, e.g. `due_date_iso`, `due_date_dt`, and `checked_str`:
+            if verbose >= 2:
+                print("Parsing dates and creating ISO strings...", file=sys.stderr)
+            inject_tasks_date_fields(task_items, strict=False)
+
+        if int(base_kwargs.get('inject_task_project_fields', 1)):
+            # Inject project info, so we can access e.g. task['project_name']:
+            if verbose >= 1:
+                print("Injecting project info...", file=sys.stderr)
+            inject_tasks_project_fields(tasks=task_items, projects=api.projects.all())
+
+        if int(base_kwargs.get('inject_task_labels_fields', 1)):
+            # Inject project info, so we can access e.g. task['project_name']:
+            if verbose >= 1:
+                print("Injecting project info...", file=sys.stderr)
+            inject_tasks_labels_fields(tasks=task_items, labels=api.labels.all())
 
     def increment_verbosity(tasks, **kwargs):
         """ Increase program informational output verbosity. """

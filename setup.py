@@ -38,7 +38,7 @@ See `README.rst` for usage.
 #   twine upload dist/*
 setup(
     name='actionista-todoist',
-    version='2019.09.06',  # remember to also update __init__.py
+    version='2019.09.09',  # remember to also update __init__.py
     packages=find_packages(),  # List all packages (directories) to include in the source dist.
     url='https://github.com/scholer/actionista-todoist',
     license='GNU General Public License v3 (GPLv3)',

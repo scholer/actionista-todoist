@@ -1,11 +1,4 @@
-import datetime
-import re
-import dateutil.parser
-import pytz
-from dateutil import tz
-from todoist.models import Item
-from copy import deepcopy
-from pprint import pprint
+# Copyright 2018-2019 Rasmus Scholer Sorensen <rasmusscholer@gmail.com>
 
 """
 
@@ -13,7 +6,7 @@ Module for task-specific functionality, e.g. adding extra fields to tasks, etc.
 Functions must operate on todoist.Item objects, or the equivalent dicts (or a list of tasks).
 
 
-Note: 
+Note:
 ISO 8601 also defines a format for durations: PnYnMnDTnHnMnS
 e.g. P3Y6M4DT12H30M5S, or P2H35M - similar to just writing 2h30m, except the ISO8601 uses capitals for time.
 
@@ -22,6 +15,16 @@ The Todoist datetime string format is "almost" the "ctime" format:
 except that Todoist has year before time of day, while ctime has year at the end.
 
 """
+
+import sys
+import datetime
+import re
+import dateutil.parser
+import pytz
+from dateutil import tz
+from todoist.models import Item, Project, Label
+from copy import deepcopy
+from pprint import pprint
 
 # Note: To get localized date formats, use the "Babel" package, c.f. https://stackoverflow.com/a/32785195/3241277
 ISO_DATE_FMT = "%Y-%m-%dT%H:%M:%S"
@@ -400,12 +403,16 @@ def inject_tasks_date_fields(
         tasks,
         date_keys=("date_added", "date_completed", "completed_date"),
         strict=False,
-        output_attr='_custom_data', deepcopy_data=True):
+        output_attr='_custom_data', deepcopy_data=True,
+        verbose=0
+):
     """ Parse date strings and create python datetime objects.
 
 
     """
-    print(f"Parsing and adding additional date information to tasks {output_attr if output_attr else ''}...")
+    if verbose:
+        print(f"Parsing and adding additional date information to tasks {output_attr if output_attr else ''}...",
+              file=sys.stderr)
     for task in tasks:
         # Get the input_data and output_data objects to read from and write to:
         input_data, output_data = get_input_output_dicts(
@@ -418,15 +425,16 @@ def inject_tasks_date_fields(
         # output_data.update(added_fields)
 
 
-def inject_tasks_project_fields(tasks, projects, strict=False, na='N/A', output_attr='_custom_data'):
+def inject_tasks_project_fields(tasks, projects, strict=False, na='N/A', output_attr='_custom_data', verbose=0):
     """ Inject project information (name, etc) for each task, using the task's project_id.
     This makes it considerably more convenient to print tasks, when each task has the project name, etc.
-    Information is injected as `task["project_%s" % k"] = v` for all key-value pairs in the task's project,
-    e.g. project_name, project_color, project_indent, project_is_archived, etc.
+    Information is injected as `getattr(task, output_attr, task.data)["project_%s" % k"] = v`
+    for all key-value pairs in the task's project, e.g. project_name, project_color, project_indent,
+    project_is_archived, etc.
 
     Args:
         tasks: A list of tasks.
-        projects: A dict of projects, keyed by `project_id`.
+        projects: A list of projects, or a dict of projects keyed by `project_id`.
         strict: If True, raise an error if a task's project_id is not found in the projects dict.
         na: If, in non-strict mode, a task's project_id is not found, use this value instead.
             It can be either a single value, which is used for the most common project fields,
@@ -437,7 +445,9 @@ def inject_tasks_project_fields(tasks, projects, strict=False, na='N/A', output_
     Returns:
         None; the task dicts are updated in-place.
     """
-    print(f"Adding additional project information to tasks {output_attr if output_attr else ''}...")
+    if verbose:
+        print(f"Adding additional project information to tasks {output_attr if output_attr else ''}...",
+              file=sys.stderr)
     if not isinstance(projects, dict):
         # If projects is e.g. a list of projects, create a dict mapping project_id to project:
         projects_by_pid = {project['id']: project for project in projects}
@@ -467,6 +477,44 @@ def inject_tasks_project_fields(tasks, projects, strict=False, na='N/A', output_
                 output_data["project_%s" % k] = v
 
 
+def inject_tasks_labels_fields(
+        tasks, labels, output_attr='_custom_data', label_fmt="@{name}", labels_sep=" ", verbose=0):
+    """ Inject labels information for each task, using the task's 'labels' attribute.
+    This makes it considerably more convenient to print tasks, when each task has the label name,
+    rather than just the label id.
+
+    Args:
+        tasks: A list of tasks.
+        labels: A list of labels, or a dict of labels keyed by `label_id`.
+        output_attr: Instead of updating task directly, update the dict found
+            in `getattr(task, output_attr)`.
+        label_fmt: How to format each label when creating `labels_str`.
+        labels_sep: How to join the labels when creating `labels_str`.
+
+    Returns:
+        None; the task dicts are updated in-place.
+    """
+    if verbose:
+        print(f"Adding additional labels information to tasks {output_attr if output_attr else ''}...",
+              file=sys.stderr)
+    if not isinstance(labels, dict):
+        # If projects is e.g. a list of projects, create a dict mapping project_id to project:
+        labels_by_id = {int(label['id']): label for label in labels}
+    else:
+        labels_by_id = labels
+    # I think it should be OK to add non-standard fields to task Items
+    del labels
+    for task in tasks:
+        # Update either `task.data` or `task._custom_data`:
+        input_data, output_data = get_input_output_dicts(task, output_attr=output_attr, deepcopy_data=True)
+        task_labels = [labels_by_id[lid] for lid in input_data['labels']]
+        label_dicts = [label.data if isinstance(label, Label) else label for label in task_labels]
+        output_data['label_names'] = [label['name'] for label in label_dicts]
+        # if lowercase_label_names:
+        #     output_data['label_names'] = [label_name.lower() for label_name in output_data['label_names']]
+        output_data['labels_str'] = labels_sep.join(label_fmt.format(**label) for label in label_dicts)
+
+
 def parse_task_content(task, output_dict, task_regex):
     try:
         output_dict.update(re.match(task_regex, task['content']).groupdict())
@@ -481,7 +529,7 @@ def parse_task_content(task, output_dict, task_regex):
     return output_dict
 
 
-def parse_tasks_content(tasks, task_regex=None, output_attr='_custom_data'):
+def parse_tasks_content(tasks, task_regex=None, output_attr='_custom_data', verbose=0):
     """ Parse tasks using the task-parsing regular expressions. Tasks are parsed and updated in-place.
     This is only for use with my custom metadata scheme where I use `{reward: 1h}` in the task content
     to define key-value metadata pairs.
@@ -497,7 +545,9 @@ def parse_tasks_content(tasks, task_regex=None, output_attr='_custom_data'):
     @Habit @Reward Check DFCI email {reward: 0.25h W}
 
     """
-    print(f"Adding additional content-parsed information to tasks {output_attr if output_attr else ''}...")
+    if verbose:
+        print(f"Adding additional content-parsed information to tasks {output_attr if output_attr else ''}...",
+              file=sys.stderr)
     if task_regex is None:
         task_regex = TASK_REGEX
     if isinstance(task_regex, str):

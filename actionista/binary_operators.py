@@ -30,6 +30,24 @@ modulus = mod
 glob = fnmatchcase
 
 
+def to_lower(obj):
+    """ Produces a lower-cased representation of obj.
+    If obj is a list or set, returns a list or set where `to_lower()`
+    has been applied to all elements.
+
+    If obj is a dict, returns a list or set where `to_lower()`
+    has been applied to all keys and values.
+
+    Else, return `str(obj).lower()`
+    """
+    if isinstance(obj, (set, list)):
+        return type(obj)([to_lower(val) for val in obj])
+    elif isinstance(obj, dict):
+        return type(obj)([(to_lower(key), to_lower(val)) for key, val in obj.items()])
+    else:
+        return str(obj).lower()
+
+
 def startswith(a, b):
     a = str(a)
     b = str(b)
@@ -38,8 +56,7 @@ def startswith(a, b):
 
 def istartswith(a, b):
     """ Case insensitive startswith. """
-    a = str(a).lower()
-    b = str(b).lower()
+    a, b = to_lower(a), to_lower(b)
     return a.startswith(b)
 
 
@@ -51,51 +68,71 @@ def endswith(a, b):
 
 def iendswith(a, b):
     """ Case insensitive startswith. """
-    a = str(a).lower()
-    b = str(b).lower()
+    a, b = to_lower(a), to_lower(b)
     return a.endswith(b)
 
 
 def icontains(a, b):
-    """ Case insensitive contains. """
-    a = str(a).lower()
-    b = str(b).lower()
+    """ Case insensitive contains.
+    Note that the order of operands is reversed between `contains` and `in_`:
+
+        contains(a, b)  <=>   b in a
+
+    """
+    a, b = to_lower(a), to_lower(b)
     return contains(a, b)
 
 
 def in_(a, b):
-    """ Returns True if `a` contains `b`, i.e. `contains` but with args in reversed order."""
+    """ Returns True if `a` contains `b`, i.e. `contains` but with args in reversed order.
+
+    Note that the order of operands is reversed between `contains` and `in_`:
+
+        contains(a, b)  <=>   b in a    <=> in_(b, a)
+
+    OBS: Please make sure this is really what you mean to use!
+    The general format of the `-filter` action is:
+        `-filter <key> <op> <value>`,
+    e.g.
+        `-filter content in "task1_content task2_content".
+    """
     return a in b
 
 
 def iin(a, b):
     """ Returns True if `a.lower()` contains `b.lower()`, i.e. `contains` but with args in reversed order."""
-    return str(a).lower() in str(b).lower()
+    a, b = to_lower(a), to_lower(b)
+    return a in b
 
 
 def ieq(a, b):
     """ Case insensitive equality. """
-    return a.lower() == b.lower()
+    a, b = to_lower(a), to_lower(b)
+    return a == b
 
 
 def ine(a, b):
     """ Case insensitive in-equality. """
-    return a.lower() != b.lower()
+    a, b = to_lower(a), to_lower(b)
+    return a != b
 
 
 def ilt(a, b):
     """ Case insensitive less-than. """
-    return a.lower() < b.lower()
+    a, b = to_lower(a), to_lower(b)
+    return a < b
 
 
 def igt(a, b):
     """ Case insensitive greater-than. """
-    return a.lower() > b.lower()
+    a, b = to_lower(a), to_lower(b)
+    return a > b
 
 
 def ige(a, b):
     """ Case insensitive greater-than-or-equal-to. """
-    return a.lower() > b.lower()
+    a, b = to_lower(a), to_lower(b)
+    return a > b
 
 
 # def is_(a, b):
@@ -113,14 +150,14 @@ def re(a, b):
 
 def ire(a, b):
     """ Returns True if `a.lower()` matches the regular expression given by `b.lower()`."""
-    return _match(b.lower(), a.lower())
+    a, b = to_lower(a), to_lower(b)
+    return _match(b, a)
 
 
 def ifnmatch(a, b):
     """ Case insensitive glob-style matching. """
-    return fnmatchcase(a.lower(), b.lower())
+    a, b = to_lower(a), to_lower(b)
+    return fnmatchcase(a, b)
 
 
 iglob = ifnmatch
-
-

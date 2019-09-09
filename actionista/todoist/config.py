@@ -11,15 +11,18 @@ import os
 import yaml
 
 
+# You can use the "precision" notation to truncate long strings during
+# string formatting, e.g. "{field:minwidth.maxwidth}"
 DEFAULT_TASK_PRINT_FMT = (
-    "{project_name:17} "
+    "{project_name:15.15} "
     # "{due_date_safe_dt:%Y-%m-%d %H:%M}  "
     # "{due_date_safe:^14}  "
-    "{due_date_pretty_safe:18} "
+    "{due_date_pretty_safe:16} "  # Omits time for all-day due dates.
     "{priority_str} "
     "{checked_str} "
-    "{content} "
-    "(due: {due_string_safe!r})"
+    "{content:.79} "
+    "(due {due_string_safe}) " 
+    " {labels_str}"
 )
 # Alternative print_fmt examples:
 # print_fmt="{project_name:15} {due_date_safe_dt:%Y-%m-%d %H:%M  } {content}",
