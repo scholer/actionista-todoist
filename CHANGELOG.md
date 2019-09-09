@@ -1,8 +1,100 @@
 
 
 
-2019-09: Move to Todoist Sync API v8
--------------------------------------
+Version 2019.09.06:
+--------------------
+
+### New `todoist-cli` CLI command:
+
+* Added alternative `todoist-cli`, a more traditional, Click-enabled CLI.
+  `todoist-cli` is a command group with sub-commands `add-task` and `print-projects`.
+    * The `todoist-cli` CLI superseds the old, argparse-based `todoist-adhoc-cli` CLI 
+      (which will probably be renamed to `todoist-argparse-cli`).
+* Added `add-task` sub-command to `todoist-cli` CLI.
+  You can use `todoist-cli add-task` to add a new task to Todoist.
+  You can also invoke this command directly using `todoist-add-task`.
+* Added `print-projects` sub-command to `todoist-cli` CLI.
+  You can use `todoist-cli print-projects` to print/list your Todoist projects.
+  This is useful if you need to e.g. add a task, but you can't remember the Todoist project names.
+
+### New `actionista-todoist-config` CLI command:
+
+* Added `actionista-todoist-config` CLI, which can be used to update the API token and create default config file.
+  You can now configure Actionista for Todoist by invoking `actionista-todoist-config`
+  from the command line.
+   
+
+### Other changes:
+
+* All Actionista for Todoist CLI commands will now append "Actionista-Todoist" info the HTTP User-Agent header
+  to `python-requests/<requests version> Actionista-Todoist/<actionista version>`.
+  The User-Agent will appear in your activity list, making it more obvious what changes you've 
+  made using the Actionista for Todoist CLIs.
+
+
+*For developer-relevant code changes, please check the git commit log.*
+
+
+
+Version 2019.09.04:
+-------------------
+
+
+* Switched to using the new v8 Sync API version.
+    * Major differences from v7: (1) How due dates are stored - now under a dedicated `due` attribute, 
+    and using "floating", rather than "fixed" timezones; times are, by default, in the user's timezone,
+    rather than UTC). And (2) projects and tasks are now using an actual "parent-child" tree, rather than 
+    simply using "indent" and "order" attributes. Tasks and projects still have an "order", but it is relative 
+    to it  siblings under the same parent. There is also still "day_order" (the order on the "today" page),
+    that haven't changed.
+
+* Now storing derived fields (e.g. "due_date_safe_dt", "project_name", and "checked_str") 
+  in separate attribute (`_custom_data`, by default), instead of contaminating the 
+  primary `.data` attribute.
+
+
+### Added `todoist-action-cli` features:
+
+* Added **-add-task** action, which can be used to add a new task. 
+  The task's project, priority, and due date is specified using `due=when` notation.
+  If you want to perform additional actions after adding a new task (e.g. `-print` or `-sort`), 
+  please make sure to `-commit` after adding the the new task before doing so.
+
+* Added **`-close`** action, which can be used to close (complete) the selected task(s):
+
+    `$ todoist-action-cli -sync -name "Task to complete" -close -commit`
+
+* Added **`-reopen`** action, which can be used to reopen (uncomplete) the selected task(s):
+
+    `$ todoist-action-cli -sync -name "Task to uncomplete" -reopen -commit`
+
+* Added **`-archive`** action, which can be used to archive the selected task(s):
+
+    `$ todoist-action-cli -sync -is completed -name "Starts-with-this*" -archive -commit`
+
+* Added **`-delete`** action, which can be used to delete the selected task(s):
+
+    `$ todoist-action-cli -sync -project "Delete-tasks-in-this-project" -delete -commit`
+
+* Fixed `-reschedule` command so it is cleaner and compliant with v8 Sync API.
+
+* Added option to skip parsing and injection of derived date and project fields, 
+  using `todoist-action-cli inject_task_date_fields=0 inject_task_project_fields=0`.
+  This is useful if your cache is corrupted and you need to delete the cache without doing any 
+  parsing tasks:
+
+      $ todoist-action-cli inject_task_date_fields=0 inject_task_project_fields=0 -delete-cache
+
+* Moved all tasks action commands to separate module, `action_commands`.
+
+*For developer-relevant code changes, please check the git commit log.*
+
+
+
+
+
+2019-09-03: Move to Todoist Sync API v8
+----------------------------------------
 
 ### What has changed between v7 and v8 of the Sync API?
 
