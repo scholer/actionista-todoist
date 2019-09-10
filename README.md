@@ -3,6 +3,11 @@
 Actionista Action-Chain CLI for Todoist (actionista-todoist)
 ============================================================
 
+* PyPI: https://pypi.org/project/actionista-todoist/
+* GitHub: https://github.com/scholer/actionista-todoist
+* Docs: https://actionista-todoist.readthedocs.io/en/latest/
+
+
 Actionista Action CLI for Todoist.
 
 Manage your Todoist tasks from the command line, using powerful filters to
