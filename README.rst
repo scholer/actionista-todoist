@@ -87,6 +87,35 @@ as documented by https://developer.todoist.com/sync/v8/.
 INSTALLATION:
 -------------
 
+
+### Installation with ``pipx``:
+
+For regular end-users, I recommend using ``pipx`` to install the Actionista-Todoist command line apps::
+
+	$ pipx install actionista-todoist
+
+If you don't have pipx installed, you can refer to the
+[pipx installation guide](https://pipxproject.github.io/pipx/installation/).
+Briefly::
+
+	$ pip install pipx
+	$ pipx ensurepath
+
+The last step will add `~/.local/bin` to the PATH environment variable.
+Please make sure to close and restart your terminal/command prompt after
+installing pipx for the first time.
+
+
+Known installation errors:
+
+* If you are using ``conda``, there is a known issue where you receive an error,
+  "Error: [Errno 2] No such file or directory:", when trying to install packages with ``pipx``.
+  If you get this error, please update your ``conda`` python and make sure you are only using
+  the "defaults" channel, *not* "conda-forge".
+
+
+### Installation with ``pip``:
+
 To install distribution release package from the Python Packaging Index (PyPI)::
 
     $ pip install -U actionista-todoist
@@ -100,21 +129,62 @@ and install the package in editable mode (development mode)::
 
 
 
+CONFIGURATION:
+--------------
+
 Once ``actionista-todoist`` package is installed, you need to obtain a login token from the todoist website:
-    Log into your todoist.com account, go to Settings → Integrations → Copy the API token.
+Log into your todoist.com account, go to ``Settings -> Integrations``, and copy the API token.
+(You can also go directly to the page: https://todoist.com/prefs/integrations).
 
-Create a file ``~/.todoist_token.txt`` and place your token in here.
+Now run::
 
+	$ actionista-todoist-config
 
-You can also add the token as a yaml-entry in the config file ``~/.todoist_config.yaml``::
+to set up the login token with your Actionista-Todoist installation.
+The API token is stored in ``~/.todoist_token.txt``.
+The ``actionista-todoist-config`` command will also create a default config file,
+``~/.todoist_config.yaml``, which you can edit to change default sorting and printing format.
 
-    token: <token>
+If you re-set your Todoist API token, you can update it either by running::
 
+	$ actionista-todoist-config --token <your-token-here>
+
+or by manually editing the file ``~/.todoist_token.txt`` and place your token in here.
 
 
 
 USAGE:
 ------
+
+The ``actionista-todoist`` package contains several command line apps (CLIs):
+
+* ``todoist-action-cli`` - also available as ``actionista-todoist``.
+* ``todoist-cli``.
+* ``actionista-todoist-config``.
+
+
+The ``todoist-action-cli`` CLI program uses the "action chain" approach, where you specify a sequence
+of "actions", which are used to filter/select tasks from Todoist and then sort, print, or reschedule
+the selected tasks in a batch-wise fashion.
+
+The ``todoist-cli`` CLI program is used mostly for things that doesn't fit the "action chain" philosophy.
+For instance, if you want to add a new task, that doesn't really fit into the ``todoist-action-cli``
+workflow.(*) Instead, you can use ``todoist-cli add-task`` command to add a new task to Todoist.
+The ``todoist-cli`` is also used for other things, e.g. printing a list of your projects, etc.
+You can run ``todoist-cli --help`` to see all available commands.
+
+Finally, the ``actionista-todoist-config`` CLI program is used to set up Actionista-Todoist,
+configuring your API login token, and creating a default configuration file.
+
+
+(*) The ``todoist-action-cli`` can technically be used to add tasks to Todoist, using the
+``-add-task`` action command - however, this is not the recommended approach.
+
+
+
+
+### `todoist-action-cli` usage:
+
 
 The general command line usage is::
 

@@ -57,7 +57,7 @@ setup(
             'todoist-action-config=actionista.todoist.config_cli:todoist_config_cli',
             'actionista-todoist-config=actionista.todoist.config_cli:todoist_config_cli',  # Alias
 
-            # todoist_cli entry points:
+            # todoist_cli entry points (click-based):
             'todoist-cli=actionista.todoist.todoist_cli:todoist_cli',
             'todoist-add-task=actionista.todoist.todoist_cli:add_task_cli',
 

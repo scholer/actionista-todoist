@@ -594,6 +594,7 @@ argument to convert input values to e.g. integers.
         if verbose >= 1:
             print(f"\nInvoking '{action_key}' action on {n_tasks} tasks with args: {action_args!r}", file=sys.stderr)
         action_func = ACTIONS[action_key]
+        # TODO: Pass `config=config` to all action commands (or move from functional to object-oritented flow).
         task_items = action_func(task_items, *action_args, verbose=verbose, **action_kwargs)
         assert task_items is not None
 
