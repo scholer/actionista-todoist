@@ -19,7 +19,7 @@ PROJECT_ROOT_DIR = os.path.abspath(os.path.dirname(__file__))
 # Get the long description from the README file
 
 try:
-    with open(os.path.join(PROJECT_ROOT_DIR, 'README.rst'), encoding='utf-8') as f:
+    with open(os.path.join(PROJECT_ROOT_DIR, 'README.md'), encoding='utf-8') as f:
         long_description = f.read()
 except IOError:
     long_description = """
@@ -27,7 +27,7 @@ Actionista Action-Chain CLI for Todoist (actionista-todoist).
 
 A `find`-inspired CLI for Todoist.
 
-See `README.rst` for usage.
+See `README.md` for usage.
 
 """
 

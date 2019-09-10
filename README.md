@@ -17,21 +17,21 @@ You start out with a list of *all* tasks, and then select tasks using one of the
 filters available. You can then sort, print, and reschedule the selected tasks.
 
 *Actionista* Action-Chain CLI for Todoist (actionista-todoist)
-is inspired by the powerful ``find`` command line tool. It takes the "chain of actions"
-approach that ``find`` uses to find and select files on your harddisk,
+is inspired by the powerful `find` command line tool. It takes the "chain of actions"
+approach that `find` uses to find and select files on your harddisk,
 and applies it for managing your Todoist task list.
 
-The successful ``find`` utility works by supplying a sequence of "actions"
-(also known as "expressions" in the ``find`` manual).
+The successful `find` utility works by supplying a sequence of "actions"
+(also known as "expressions" in the `find` manual).
 
 Most actions are essentially filters, where you list criteria for the files to find.
-However, the real usability of ``find`` is that it can not only print the matching files,
+However, the real usability of `find` is that it can not only print the matching files,
 but also use the matching files for other actions, e.g. deleting the files,
 or sending them to other command line tools.
 
 The *actionista* action-chain CLI takes a similar approach.
 Starting from the full list of tasks, you can apply filters to find exactly those tasks that you need.
-Together with other actions, you can ``print``, ``reschedule``, ``rename``, ``mark-complete``, or ``delete``
+Together with other actions, you can `print`, `reschedule`, `rename`, `mark-complete`, or `delete`
 whatever tasks you need.
 You can invoke as many actions as you need, both filters and other actions, in any order.
 The actions are invoked in exactly the order you specify.
@@ -44,7 +44,7 @@ and finally commit the changes to the server.
 This example is mostly just to show what is possible,
 and I personally wouldn't recommend having such a complex list of actions,
 but you are basically free to list as many (or as few) actions as you want or need.
-For the record, doing the described sequence of actions would look something like this::
+For the record, doing the described sequence of actions would look something like this:
 
     $ todoist-action-cli -project Wedding -print \
         -due before today \
@@ -56,7 +56,7 @@ For the record, doing the described sequence of actions would look something lik
 
 
 Usually, for your own sanity, command line usage would be a little more simple, and have only a single "purpose"
-with each invocation::
+with each invocation:
 
     # Basic example: Find tasks containing the string "rings":
 
@@ -64,12 +64,12 @@ with each invocation::
 
 
 
-The generalized command line usage is::
+The generalized command line usage is:
 
     $ todoist-action-cli [-action [args]] [-action [args]] [...]
 
 
-You can also import the package from python::
+You can also import the package from python:
 
     >>> import actionista.todoist
     >>> import actionista.todoist.action_cli
@@ -90,13 +90,13 @@ INSTALLATION:
 
 ### Installation with ``pipx``:
 
-For regular end-users, I recommend using ``pipx`` to install the Actionista-Todoist command line apps::
+For regular end-users, I recommend using ``pipx`` to install the Actionista-Todoist command line apps:
 
 	$ pipx install actionista-todoist
 
 If you don't have pipx installed, you can refer to the
 [pipx installation guide](https://pipxproject.github.io/pipx/installation/).
-Briefly::
+Briefly:
 
 	$ pip install pipx
 	$ pipx ensurepath
@@ -116,13 +116,13 @@ Known installation errors:
 
 ### Installation with ``pip``:
 
-To install distribution release package from the Python Packaging Index (PyPI)::
+To install distribution release package from the Python Packaging Index (PyPI):
 
     $ pip install -U actionista-todoist
 
 
 Alternatively, install the latest git master source by fetching the git repository from github
-and install the package in editable mode (development mode)::
+and install the package in editable mode (development mode):
 
     $ git clone git@github.com:scholer/actionista-todoist && cd actionista-todoist
     $ pip install -U -e .
@@ -136,7 +136,7 @@ Once ``actionista-todoist`` package is installed, you need to obtain a login tok
 Log into your todoist.com account, go to ``Settings -> Integrations``, and copy the API token.
 (You can also go directly to the page: https://todoist.com/prefs/integrations).
 
-Now run::
+Now run:
 
 	$ actionista-todoist-config
 
@@ -145,7 +145,7 @@ The API token is stored in ``~/.todoist_token.txt``.
 The ``actionista-todoist-config`` command will also create a default config file,
 ``~/.todoist_config.yaml``, which you can edit to change default sorting and printing format.
 
-If you re-set your Todoist API token, you can update it either by running::
+If you re-set your Todoist API token, you can update it either by running:
 
 	$ actionista-todoist-config --token <your-token-here>
 
@@ -186,12 +186,12 @@ configuring your API login token, and creating a default configuration file.
 ### `todoist-action-cli` usage:
 
 
-The general command line usage is::
+The general command line usage is:
 
     $ todoist-action-cli [actions]
     $ todoist-action-cli [-action [args]]
 
-Where ``action`` is one of the following actions::
+Where ``action`` is one of the following actions:
 
     # Sorting and printing tasks:
 
@@ -245,11 +245,11 @@ Where ``action`` is one of the following actions::
       -yes, -y               Disable confirmation prompt before enacting irreversible commands, e.g. -commit.
       -help, -h              Print help messages. Use `-help <action>` to get help on a particular action.
 
-To see how to use each filter, type::
+To see how to use each filter, type:
 
     $ todoist-action-cli -help <action_name>
 
-E.g.::
+E.g.:
 
     $ todoist-action-cli -help project
     $ todoist-action-cli -help filter
@@ -257,7 +257,7 @@ E.g.::
 
 
 
-As you can see, typical usage is::
+As you can see, typical usage is:
 
     $ todoist-action-cli -sync [one or more filter actions to select the tasks] -sort -print
 
@@ -272,7 +272,7 @@ If you need to refine your filters, just run the command again. The data is cach
 so if you omit the ``-sync`` action, commands can be executed in rapid succession.
 
 
-Another example, to reschedule the due date for a bunch of tasks, would look like::
+Another example, to reschedule the due date for a bunch of tasks, would look like:
 
     $ todoist-action-cli [-sync] [filter actions] [-sort] [-print] -reschedule "Apr 21" -commit
 
@@ -284,13 +284,11 @@ apply the correct selection filters before renaming or rescheduling the tasks!
 For this reason, the program will, by default, ask you for confirmation before every `-commit`.*
 
 
-Action arguments:
------------------
-
+#### Action arguments:
 
 Each action can be provided a set of arguments which are listed sequentially, separated by space.
 If one argument contains spaces, e.g. you are filtering by tasks in the project "Meeting notes",
-then you need to quote the argument as such::
+then you need to quote the argument as such:
 
     $ todoist-action-cli -sync -project "Meeting notes" -sort "project_name,content" ascending -print
 
@@ -298,13 +296,13 @@ Here, we provided one argument to the ``-project`` action (``"Meeting notes"``),
 and two arguments to the ``-sort`` action (``"project_name,content"`` and ``ascending``).
 
 Some of the actions attempts to be "clever" when interpreting the arguments given.
-For instance, when filtering by project, you can do either::
+For instance, when filtering by project, you can do either:
 
     $ todoist-action-cli -project "Wedding*"
     $ todoist-action-cli -project glob "Wedding*"
     $ todoist-action-cli -project startswith Wedding
 
-The general signature for the ``-project`` action is::
+The general signature for the ``-project`` action is:
 
     $ todoist-action-cli -project [operator] value
 
@@ -315,7 +313,7 @@ The "glob" operator allows you to use wild-cards for selecting tasks, the same w
 In our case, we "glob" against tasks with project name starting with the string "Wedding*".
 We could also have used the "startswith" operator, and omit the asterisk:  ``startswith Wedding``.
 
-For more info on how to use operators, see::
+For more info on how to use operators, see:
 
     $ todoist-action-cli -help operators
 
@@ -327,12 +325,12 @@ Ad-hoc CLI:
 ------------
 
 Installing this project (``actionista-todoist``) with ``pip`` will also give you some
-"ad-hoc" command line interface entry points::
+"ad-hoc" command line interface entry points:
 
-    $ todoist <command> <args>
-    $ todoist print-query <query> [<print-fmt>]
-    $ todoist print-completed-today [<print-fmt>]
-    $ todoist print-today-or-overdue-items [<print-fmt>]
+    $ todoist-adhoc <command> <args>
+    $ todoist-adhoc print-query <query> [<print-fmt>]
+    $ todoist-adhoc print-completed-today [<print-fmt>]
+    $ todoist-adhoc print-today-or-overdue-items [<print-fmt>]
 
     # And a couple of endpoints with convenient defaults, e.g.:
 
@@ -344,23 +342,36 @@ Installing this project (``actionista-todoist``) with ``pip`` will also give you
 Prior art: Other python-based Todoist projects
 -----------------------------------------------
 
-**Other Todoist CLI packages that I know about:**
+#### Other Todoist CLI packages that I know about:
 
 * [todoist-cli](https://pypi.org/project/todoist-cli/0.0.1/) -
     A command line interface for batch creating Todoist tasks from a file.
     Makes manual requests against the web API url (rather than using the official todoist-python package).
-    No updates since January 2016.
+    No updates since January 2016 (except `setup.py` and `requirements.txt`).
+    This probably doesn't work, given that it uses an old, obsolete API endpoint URL.
+
 * [todoicli](https://pypi.org/project/todoicli/) - A rather new project (as of April 2018).
     Focuses on pre-defined queries for listing tasks, e.g. "today and overdue", "next 7 days", etc.
     Lots of other functionality, pretty extensive code base.
-    Uses the official ``todoist-python`` package.
+    Has integration with the toggl.com time tracking service.
+    Uses the official ``todoist-python`` package, but still uses the 
+    "universal UTC" time format from the old v7 Sync API, and the v7 due-date structure.
+    That means it probably won't work anymore, given that the v7 Sync API has been deprecated,
+    and the `todoist-python` package has switched to Sync API v8.
+    For instance, the `list td` and `list n7` uses `item['due_date_utc']`, which will raise 
+    a `KeyError` with the new v8 data structure.
+    The CLI also expects `IDs` (`task_id`, `label_id`, `project_id`), rather than text names,
+    making it rather difficult to use for the end user.
 
-* {pydoist}(https://pypi.org/project/Pydoist/) - A basic CLI to add Todoist tasks from the command line.
+* [pydoist](https://pypi.org/project/Pydoist/) - A basic CLI to add Todoist tasks from the command line.
+    Uses the official `todoist-python` python API from Todoist.
+    Lastest release was November 2016, so may not work with the new v8 Sync API.
 
 
-**Other general python Todoist packages:**
+#### Other general python Todoist packages:
 
-* python-todoist - The official python 'Todoist' package from Doist (the company behind Todoist).
+* [python-todoist](https://pypi.org/project/todoist-python/) - The official python 
+    'Todoist' package from Doist (the company behind Todoist).
     Is currently using the version 8.0 "Sync" API.
 
 * [pytodoist](https://pypi.org/project/pytodoist/) - An alternative Todoist API package.
