@@ -1,0 +1,8 @@
+site_name: Actionista-Todoist
+nav:
+  - Home: index.md
+  - Installation: installation.md
+  - Usage: usage.md
+  - Action CLI: action-cli.md
+  - Todoist CLI: todoist-cli.md
+theme: readthedocs

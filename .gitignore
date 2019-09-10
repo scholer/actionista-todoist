@@ -105,3 +105,6 @@ ENV/
 
 # Ignore notebooks/ for now:
 notebooks/
+
+# MkDocs static site HTML:
+site/

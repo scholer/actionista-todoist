@@ -23,9 +23,12 @@ try:
         long_description = f.read()
 except IOError:
     long_description = """
-Actionista Action-Chain CLI for Todoist (actionista-todoist). 
+Actionista Action CLI for Todoist (actionista-todoist). 
 
 A `find`-inspired CLI for Todoist.
+
+Add, select, print, reschedule, modify, and complete tasks in a batch-wise fashion
+from the command line.
 
 See `README.md` for usage.
 
@@ -38,15 +41,18 @@ See `README.md` for usage.
 #   twine upload dist/*
 setup(
     name='actionista-todoist',
-    version='2019.9.9',  # remember to also update __init__.py
+    version='2019.9.10',  # remember to also update __init__.py
     packages=find_packages(),  # List all packages (directories) to include in the source dist.
     url='https://github.com/scholer/actionista-todoist',
     license='GNU General Public License v3 (GPLv3)',
     author='Rasmus Scholer Sorensen',
     author_email='rasmusscholer@gmail.com',
-    description='Actionista Action-Chain CLI for Todoist. Manage your Todoist tasks from the command line.',
+    description='Actionista Action CLI for Todoist. '
+                'Add, select, print, reschedule, modify, and complete tasks in a batch-wise fashion '
+                'from the command line.',
     long_description=long_description,
-    keywords=['Productivity', 'TODO', 'Todoist', 'GTD', 'Rewards', 'Tasks', 'CLI'],
+    long_description_content_type='text/markdown',
+    keywords=['Todoist', 'Tasks', 'Productivity', 'TODO', 'GTD', 'CLI'],
     entry_points={
         'console_scripts': [
             # Action CLI entry points:
