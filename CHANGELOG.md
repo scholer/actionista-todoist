@@ -1,5 +1,17 @@
 
 
+Version 2019.09.10:
+-------------------
+
+### Documentation:
+
+* Added documentation files (`docs/`),
+    and moved most of the content from `actionista/todoist/README.md` to these docs.
+* Changed README format from reStructuredText (`.rst`) to Markdown (`.md`).
+* Added developer-related notes (`DEVELOPMENT.md`).
+ 
+
+
 
 Version 2019.09.09:
 -------------------
@@ -161,8 +173,8 @@ Task `due` property changes:
 	* The `items.update_date_complete()` method now expects a `due` parameter,
 	  instead of `new_date_utc`, `date_string` and/or `is_forward` parameters.
 * The new `due` property has the following:
-	* `date` (str): RFC-3339 date, either "YYYY-MM-DD" or "YYYY-MM-DDTHH:MM:SS".
-		If `date` is YYYY-MM-DD, it is considered an "all day" item with no specified time.
+	* `date` (str): RFC-3339 date, either `"YYYY-MM-DD"` or `"YYYY-MM-DDTHH:MM:SS"`.
+		If `date` is `YYYY-MM-DD`, it is considered an "all day" item with no specified time.
 		This is different from the v7 API, where a time of 23:59:59 was used to indicate an "all day" task.
 	* So, a major difference is that an "all-day" task in v7 API had a time of 23:59:59,
 		while an "all day" task in v8 API does not have a time.
@@ -185,7 +197,8 @@ Reminders:
 
 Date format changes:
 
-* Date formats must be RFC-3339, i.e. "YYYY-MM-DD" or "YYYY-MM-DDTHH:MM:SS" or (maybe?) "YYYY-MM-DD HH:MM:SS"
+* Date formats must be RFC-3339, i.e. `"YYYY-MM-DD"` or `"YYYY-MM-DDTHH:MM:SS"`
+    or (maybe?) `"YYYY-MM-DD HH:MM:SS"`.
 	* From the RFC-3339 specs: [RFC-3339 is] "a profile of the ISO 8601 standard".
 
 Other method changes:
