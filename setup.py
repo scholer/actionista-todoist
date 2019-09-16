@@ -41,7 +41,7 @@ See `README.md` for usage.
 #   twine upload dist/*
 setup(
     name='actionista-todoist',
-    version='2019.9.10',  # remember to also update __init__.py
+    version='2019.9.16',  # remember to also update __init__.py
     packages=find_packages(),  # List all packages (directories) to include in the source dist.
     url='https://github.com/scholer/actionista-todoist',
     license='GNU General Public License v3 (GPLv3)',
@@ -77,7 +77,7 @@ setup(
     },
     # pip will install these modules as requirements.
     install_requires=[
-        'todoist-python',   # official Todoist python API from Doist
+        'todoist-python>=8.0',   # official Todoist python API from Doist
         'pyyaml',           # Config loading.
         'pytz',             # Timezone support.
         'python-dateutil',  # Parsing ISO timestamps.

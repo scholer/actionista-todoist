@@ -37,8 +37,7 @@ from pprint import pprint
 from actionista import binary_operators
 from actionista.todoist import action_commands
 from actionista.todoist.action_commands import ACTIONS
-from .tasks_utils import inject_tasks_date_fields, inject_tasks_project_fields, inject_tasks_labels_fields
-from .tasks_utils import CUSTOM_FIELDS
+from actionista.todoist.tasks_utils import add_custom_task_fields
 from actionista.todoist.config import get_config, get_token
 
 NEWLINE = '\n'
@@ -395,25 +394,7 @@ def action_cli(argv=None, verbose=0):
     # so we should have `todoist.model.Item` object instances (not just the dicts received from the server):
     task_items = api.state['items']
 
-    if int(base_kwargs.get('inject_derived_task_fields', 1)):
-
-        if int(base_kwargs.get('inject_task_date_fields', 1)):
-            # Inject custom date fields, e.g. `due_date_iso`, `due_date_dt`, and `checked_str`:
-            if verbose >= 2:
-                print("Parsing dates and creating ISO strings...", file=sys.stderr)
-            inject_tasks_date_fields(task_items, strict=False)
-
-        if int(base_kwargs.get('inject_task_project_fields', 1)):
-            # Inject project info, so we can access e.g. task['project_name']:
-            if verbose >= 1:
-                print("Injecting project info...", file=sys.stderr)
-            inject_tasks_project_fields(tasks=task_items, projects=api.projects.all())
-
-        if int(base_kwargs.get('inject_task_labels_fields', 1)):
-            # Inject project info, so we can access e.g. task['project_name']:
-            if verbose >= 1:
-                print("Injecting project info...", file=sys.stderr)
-            inject_tasks_labels_fields(tasks=task_items, labels=api.labels.all())
+    add_custom_task_fields(tasks=task_items, api=api, verbose=verbose, **base_kwargs)
 
     def increment_verbosity(tasks, **kwargs):
         """ Increase program informational output verbosity. """
@@ -442,15 +423,15 @@ def action_cli(argv=None, verbose=0):
         # Remove custom fields (in preparation for JSON serialization during `_write_cache()`:
         n_before = len(tasks)
         print("\nSyncing... (fetching updates FROM the server; use `commit` to push changes!)")
-        for task in api.state['items']:
-            for k in CUSTOM_FIELDS:
-                task.data.pop(k, None)  # pop(k, None) returns None if key doesn't exists, unlike `del task[k]`.
+        # Removing custom fields is no longer needed, now custom/derived data is stored in separate attribute.
+        # for task in api.state['items']:
+        #     for k in CUSTOM_FIELDS:
+        #         task.data.pop(k, None)  # pop(k, None) returns None if key doesn't exists, unlike `del task[k]`.
         api.sync()
         tasks = api.state['items']
         n_after = len(tasks)
         print(f" - {n_after} tasks after sync ({n_before} tasks in the task list before sync).")
-        inject_tasks_date_fields(tasks)
-        inject_tasks_project_fields(tasks=tasks, projects=api.projects.all())
+        add_custom_task_fields(tasks=tasks, api=api, verbose=verbose, **base_kwargs)
         return tasks
 
     ACTIONS['sync'] = sync
@@ -465,15 +446,14 @@ def action_cli(argv=None, verbose=0):
                 return tasks
         if verbose > -1:
             print(f"\nCommitting {len(api.queue)} local changes and fetching updates...")
-        # Remove custom fields before commit (and re-add them again afterwards)
-        for task in api.state['items']:
-            for k in CUSTOM_FIELDS:
-                task.data.pop(k, None)  # pop(k, None) returns None if key doesn't exists, unlike `del task[k]`.
+        # Removing custom fields is no longer needed, now custom/derived data is stored in separate attribute.
+        # for task in api.state['items']:
+        #     for k in CUSTOM_FIELDS:
+        #         task.data.pop(k, None)  # pop(k, None) returns None if key doesn't exists, unlike `del task[k]`.
         # Commit changes (includes an automatic sync), and re-parse task items:
         api.commit(raise_on_error=raise_on_error)
         tasks = api.state['items']
-        inject_tasks_project_fields(tasks=tasks, projects=api.projects.all())
-        inject_tasks_date_fields(tasks)
+        add_custom_task_fields(tasks=tasks, api=api, verbose=verbose, **base_kwargs)
         return tasks
 
     ACTIONS['commit'] = commit

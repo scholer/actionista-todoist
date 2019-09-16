@@ -353,11 +353,64 @@ def get_input_output_dicts(task, output_attr="_custom_data", deepcopy_data=True)
     return input_data, output_data
 
 
+def add_custom_task_fields(
+        tasks,
+        api,
+        inject_derived_task_fields=1,
+        inject_task_date_fields=1,
+        inject_task_project_fields=1,
+        inject_task_labels_fields=1,
+        *,
+        verbose=0,
+        **kwargs
+):
+    """ Add custom data fields to each task.
+    Alternative version of `inject_tasks_custom_data()`, this version is intended to
+    be called with values taken directly from the command line, hence why input arguments are
+    being cast to int, as the input may likely be e.g. str '0' or '1'.
+
+    Args:
+        tasks:
+        api:
+        inject_derived_task_fields:
+        inject_task_date_fields:
+        inject_task_project_fields:
+        inject_task_labels_fields:
+        verbose:
+        **kwargs:
+
+    Returns:
+        List of tasks, for chaining.
+    """
+    if int(inject_derived_task_fields):
+
+        if int(inject_task_date_fields):
+            # Inject custom date fields, e.g. `due_date_iso`, `due_date_dt`, and `checked_str`:
+            if verbose >= 2:
+                print("Parsing dates and creating ISO strings...", file=sys.stderr)
+            inject_tasks_date_fields(tasks=tasks, strict=False)
+
+        if int(inject_task_project_fields):
+            # Inject project info, so we can access e.g. task['project_name']:
+            if verbose >= 1:
+                print("Injecting project info...", file=sys.stderr)
+            inject_tasks_project_fields(tasks=tasks, projects=api.projects.all())
+
+        if int(inject_task_labels_fields):
+            # Inject project info, so we can access e.g. task['project_name']:
+            if verbose >= 1:
+                print("Injecting project info...", file=sys.stderr)
+            inject_tasks_labels_fields(tasks=tasks, labels=api.labels.all())
+
+    return tasks
+
+
 def inject_tasks_custom_data(
         tasks, output_attr="_custom_data", deepcopy_data=True,
         add_dates=True,
         parse_content=False, task_regex=TASK_REGEX,
-        add_project_info=True, projects=None
+        add_project_info=True, projects=None,
+        add_label_fields=True, labels=None, label_fmt="@{name}", labels_sep=" ",
 ):
     """ Parse task data (e.g. dates) and inject custom data fields.
 
@@ -376,9 +429,13 @@ def inject_tasks_custom_data(
         task_regex:
         add_project_info:
         projects:
+        add_label_fields: Whether to add custom task-label fields.
+        labels: The full list of labels from the API, so we can map LabelID to Label.
+        label_fmt: The format of each label (e.g. prefix @).
+        labels_sep: The separator to use when making "labels_str".
 
     Returns:
-
+        None; tasks are updated in-place.
     """
     for task in tasks:
         # Get the input_data and output_data objects to read from and write to:
@@ -397,6 +454,9 @@ def inject_tasks_custom_data(
     if add_project_info:
         assert projects is not None
         inject_tasks_project_fields(tasks=tasks, projects=projects)
+
+    if add_label_fields:
+        inject_tasks_labels_fields(tasks, labels, output_attr=output_attr, label_fmt=label_fmt, labels_sep=labels_sep)
 
 
 def inject_tasks_date_fields(
@@ -564,4 +624,3 @@ def parse_tasks_content(tasks, task_regex=None, output_attr='_custom_data', verb
             output_data = task
         parse_task_content(task, output_data, task_regex)
     return tasks
-
