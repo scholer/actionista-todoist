@@ -68,16 +68,15 @@ setup(
             'todoist-add-task=actionista.todoist.todoist_cli:add_task_cli',
 
             # Entry points for adhoc_cli commands (argparse-based):
-            'todoist-adhoc=actionista.todoist.adhoc_cli:main',
-            'todoist-adhoc-cli=actionista.todoist.adhoc_cli:main',  # alias
-            'todoist_today_or_overdue=actionista.todoist.adhoc_cli:print_today_or_overdue_tasks',
+            # 'todoist-adhoc=actionista.todoist.adhoc_cli:main',
+            'todoist-adhoc-cli=actionista.todoist.adhoc_cli:main',
         ],
         # 'gui_scripts': [
         # ]
     },
     # pip will install these modules as requirements.
     install_requires=[
-        'todoist-python>=8.0',   # official Todoist python API from Doist
+        'todoist-python>=8.0',  # Official Todoist python API from Doist
         'pyyaml',           # Config loading.
         'pytz',             # Timezone support.
         'python-dateutil',  # Parsing ISO timestamps.
