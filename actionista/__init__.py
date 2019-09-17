@@ -9,4 +9,4 @@ from the command line.
 """
 
 # Do not zero-pad month or day:
-__version__ = '2019.9.16'  # remember to also update setup.py
+__version__ = '2019.9.17'  # remember to also update setup.py

@@ -12,3 +12,4 @@ requests
 six
 tzlocal
 urllib3
+click

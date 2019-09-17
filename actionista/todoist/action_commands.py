@@ -24,6 +24,7 @@ from actionista.todoist.config import DEFAULT_TASK_PRINT_FMT, DEFAULT_TASK_SORT_
 from actionista.todoist.config import get_config
 from actionista.todoist.tasks_utils import get_task_value, get_recurring_tasks, is_recurring
 from actionista.todoist.tasks_utils import inject_tasks_project_fields
+from actionista.todoist import api_commands
 
 
 CONFIG = get_config()
@@ -898,8 +899,11 @@ def delete_tasks(tasks, *, verbose=0):
     return tasks
 
 
-def add_task(tasks, api, task_content, *, project=None, due=None, priority=None, labels=None,
-             auto_reminder=True, auto_parse_labels=True, verbose=0):
+def add_task(tasks, api, task_content, *,
+             project=None, due=None, priority=None, labels=None,
+             auto_reminder=True, auto_parse_labels=True,
+             sync=0, commit=0, show_queue=0,
+             verbose=0):
     """ Add a new task API method 'item_add'.
 
     See: https://developer.todoist.com/sync/v8/?shell#add-an-item
@@ -923,53 +927,18 @@ def add_task(tasks, api, task_content, *, project=None, due=None, priority=None,
         print(f"\nAdding new task (using API method 'item_add') ...", file=sys.stderr)
         print("\n --> Remember to `-commit` the changes to the server! <--", file=sys.stderr)
 
-    params = {'auto_reminder': auto_reminder, 'auto_parse_labels': auto_parse_labels}
-
-    if due:
-        params['due'] = {"string": due}
-
-    if project:
-        if isinstance(project, str):
-            # Assume project-name:
-            # We need to find project_id from project_name:
-            # If projects is e.g. a list of projects, create a dict mapping project_id to project:
-            project_name = project
-            # projects_by_name = {p['name']: p for p in api.projects.all()}
-            # project_id = projects_by_name[project]['id']
-            project_id = next(iter(p['id'] for p in api.projects.all() if p['name'] == project_name))
-        else:
-            # Project should be a project_id:
-            assert isinstance(project, int)
-            project_id = project
-        params['project_id'] = project_id
-
-    if labels:
-        if isinstance(labels, str):
-            labels = [label.strip() for label in labels.split(",")]
-        if any(isinstance(label, str) for label in labels):
-            # Assume label-name: We need to find label_id from label_name:
-            labels_by_name = {label['name']: label for label in api.labels.all()}
-            labels = [label if isinstance(label, int) else labels_by_name[label]['id'] for label in labels]
-        params['labels'] = labels
-
-    if priority:
-        if isinstance(priority, str):
-            # Priority in the form of "p1" to "p4".
-            priority_str = priority
-            priority_str_map = dict(p1=4, p2=3, p3=2, p4=1)
-            try:
-                priority = priority_str_map[priority]
-            except KeyError:
-                raise ValueError("Argument `priority` must be one of 'p1', 'p2', 'p3', or 'p4' (if str).")
-        else:
-            # Integer between 1 and 4:
-            if not isinstance(priority, int):
-                raise TypeError("Argument `priority` must be str or int.")
-            if priority < 1 or 4 < priority:
-                raise ValueError("Argument `priority` must be between 1 and 4 (if int).")
-        params['priority'] = priority
-
-    new_task = api.items.add(task_content, **params)
+    new_task = api_commands.add_task(
+        content=task_content,
+        project=project,
+        due=due,
+        labels=labels,
+        priority=priority,
+        auto_reminder=auto_reminder,
+        auto_parse_labels=auto_parse_labels,
+        sync=bool(int(sync)), commit=bool(int(commit)), show_queue=bool(int(show_queue)),
+        verbose=verbose,
+        api=api,
+    )
     # tasks.append(new_task)  # This should not be needed, because api.items.add() updates the `tasks` list.
 
     return tasks
