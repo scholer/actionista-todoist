@@ -3,6 +3,29 @@
 Version 2019.09.10:
 -------------------
 
+### `todoist-action-cli` changes:
+
+* Fixed issue where custom label fields weren't added after `-sync`. This was particularly 
+  noticeable after deleting the cache.
+
+
+### Other changes:
+
+* Package install now requires `todoist-python` version 8.0.0 or above to prevent install 
+  with old versions of todoist-python.
+* Removed `todoist_today_or_overdue` and `todoist-adhoc` entry points (executables).
+  There is still the `todoist-adhoc-cli` alias, but many of the commands are now broken,
+  since Todoist deprecated the adhoc query endpoint.
+
+
+*For developer-relevant code changes, please check the git commit log.*
+
+
+
+
+Version 2019.09.10:
+-------------------
+
 ### Documentation:
 
 * Added documentation files (`docs/`),

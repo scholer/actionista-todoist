@@ -41,7 +41,7 @@ See `README.md` for usage.
 #   twine upload dist/*
 setup(
     name='actionista-todoist',
-    version='2019.9.10',  # remember to also update __init__.py
+    version='2019.9.16',  # remember to also update __init__.py
     packages=find_packages(),  # List all packages (directories) to include in the source dist.
     url='https://github.com/scholer/actionista-todoist',
     license='GNU General Public License v3 (GPLv3)',
@@ -68,16 +68,15 @@ setup(
             'todoist-add-task=actionista.todoist.todoist_cli:add_task_cli',
 
             # Entry points for adhoc_cli commands (argparse-based):
-            'todoist-adhoc=actionista.todoist.adhoc_cli:main',
-            'todoist-adhoc-cli=actionista.todoist.adhoc_cli:main',  # alias
-            'todoist_today_or_overdue=actionista.todoist.adhoc_cli:print_today_or_overdue_tasks',
+            # 'todoist-adhoc=actionista.todoist.adhoc_cli:main',
+            'todoist-adhoc-cli=actionista.todoist.adhoc_cli:main',
         ],
         # 'gui_scripts': [
         # ]
     },
     # pip will install these modules as requirements.
     install_requires=[
-        'todoist-python',   # official Todoist python API from Doist
+        'todoist-python>=8.0',  # Official Todoist python API from Doist
         'pyyaml',           # Config loading.
         'pytz',             # Timezone support.
         'python-dateutil',  # Parsing ISO timestamps.

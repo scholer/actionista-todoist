@@ -167,7 +167,7 @@ def store_default_user_config(overwrite_existing=False):
         elif overwrite_existing is None:
             overwrite = (input("Do you want to overwrite the current config? [Y/n]").lower() or 'y')[0] == 'y'
         else:
-            raise ValueError(f"Value '{value}' of argument 'overwrite_existing' not recognized. "
+            raise ValueError(f"Value '{overwrite_existing}' of argument 'overwrite_existing' not recognized. "
                              "Must be one of True/False/None.")
         if not overwrite:
             print(" - Skipping.")
