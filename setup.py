@@ -52,7 +52,7 @@ setup(
                 'from the command line.',
     long_description=long_description,
     long_description_content_type='text/markdown',
-    keywords=['Todoist', 'Tasks', 'Productivity', 'TODO', 'GTD', 'CLI'],
+    keywords=['Todoist', 'Tasks', 'Productivity', 'TODO', 'GTD', 'CLI', 'Application'],
     entry_points={
         'console_scripts': [
             # Action CLI entry points:

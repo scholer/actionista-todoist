@@ -145,13 +145,13 @@ def re(a, b):
     which are usually `a lt b  ==> lt(a, b) ==>  a < b`,
     Note that `fnmatchcase(name, pat)` follows the "correct" order.
     """
-    return _match(b, a)
+    return bool(_match(b, a))
 
 
 def ire(a, b):
     """ Returns True if `a.lower()` matches the regular expression given by `b.lower()`."""
     a, b = to_lower(a), to_lower(b)
-    return _match(b, a)
+    return bool(_match(b, a))
 
 
 def ifnmatch(a, b):
@@ -160,4 +160,11 @@ def ifnmatch(a, b):
     return fnmatchcase(a, b)
 
 
+# More aliases:
 iglob = ifnmatch
+matches = re
+imatches = ire
+isin = in_
+# __dict__['in'] = in_  # The module's __dict__ is only available "from the outside, after import".
+vars()['in'] = in_  # vars is read-only.
+
