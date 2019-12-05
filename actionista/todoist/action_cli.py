@@ -35,7 +35,7 @@ from pprint import pprint
 
 from actionista import binary_operators
 from actionista.todoist import action_commands
-from actionista.todoist.action_cli_argv_parser import parse_argv
+from actionista.action_cli_core.action_cli_argv_parser import parse_argv
 from actionista.todoist.action_commands import ACTIONS
 from actionista.todoist.tasks_utils import add_custom_task_fields
 from actionista.todoist.config import get_config, get_token
