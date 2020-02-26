@@ -483,7 +483,11 @@ argument to convert input values to e.g. integers.
 
     unrecognized_actions = [agroup[0] for agroup in action_groups if agroup[0] not in ACTIONS]
     if unrecognized_actions:
-        print("\nERRROR, the following actions were not recognized:", unrecognized_actions)
+        print("\nERROR, the following actions were not recognized:", unrecognized_actions)
+        for act_str in unrecognized_actions:
+            if act_str.startswith("-"):
+                print(f"Did you type '-{act_str}' on the command line? For todoist-action-cli, "
+                      f"actions are marked by just a single dash, i.e. '-{act_str.strip('-')}'")
         return
 
     if len(action_groups) == 0:
