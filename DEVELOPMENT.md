@@ -13,12 +13,14 @@ Publishing takes the following steps:
 
 ### Summary:
 
+Assuming you have properly configured your `~/.pypirc` file:
+
 ```cmd
 
 python setup.py sdist bdist_wheel
 twine check dist/*
-twine upload testpypi dist/*
-twine upload dist/*
+twine upload -r testpypi dist/*
+twine upload -r pypi dist/*
 
 git commit -m "Release <version>."
 git tag -a "Release <version>".
@@ -45,17 +47,17 @@ Create distribution package:
 Perform basic local package checks (e.g. that the `long_description` will
 render properly):
 
-    $ twine check dist/*
+    $ python -m twine check dist/*
 
 Test the package by uploading to test server, using either setuptools or twine:
 
-	$ twine upload --repository-url https://test.pypi.org/legacy/ dist/*
+	$ python -m twine upload --repository-url https://test.pypi.org/legacy/ dist/*
 
 Check the project page on the test server: https://test.pypi.org/project/actionista-todoist/
 
 Upload the distribution package to PyPI, using either setuptools or twine:
 
-	$ twine upload dist/*
+	$ python -m twine upload dist/*
 
 OBS: You can also use good old setuptools to upload, but it may or may not be secure:
 

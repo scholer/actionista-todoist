@@ -36,9 +36,9 @@ See `README.md` for usage.
 
 
 # Distribution build and release:
-#   python setup.py sdist
-#   python setup.py bdist_wheel
-#   twine upload dist/*
+#   python setup.py sdist bdist_wheel
+#   python -m twine check dist/*
+#   python -m twine upload dist/*
 setup(
     name='actionista-todoist',
     version='2019.9.17',  # remember to also update __init__.py
